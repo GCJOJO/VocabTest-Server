@@ -1,7 +1,11 @@
 {
+  "type" : "module",
   "dependencies": {
+    "body-parser": "^2.2.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "mysql2": "^3.16.2"
+    "express-ws": "^5.0.2",
+    "mysql2": "^3.16.2",
+    "ws": "^8.19.0"
   }
 }
