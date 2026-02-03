@@ -4,26 +4,49 @@ import expressWs from 'express-ws'
 import bodyParser from 'body-parser'
 import cors from 'cors'
 
-let lobbies = {}
+var lobbies = [];
+
+let con = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "vocab_test"
+});
+
+const corsOption =
+{
+    origin: '*',
+    optionsSuccessStatus: 200
+}
 
 const app = express()
-expressWs(app)
 
-clients = [];
+app.use(cors(corsOption))
+app.set('port', process.env.PORT || 5762);
 
-app.ws('/', function(ws, req)
+const wsApp = express()
+wsApp.use(cors(corsOption))
+wsApp.set('port', process.env.PORT || 5763);
+expressWs(wsApp)
+
+// create application/json parser
+var jsonParser = bodyParser.json()
+ 
+// create application/x-www-form-urlencoded parser
+var urlencodedParser = bodyParser.urlencoded({ extended: false })
+
+wsApp.ws('/', function(ws, req)
 {
     ws.on('message', function(msg)
     {
+        //var dataStr = new TextDecoder("utf-8").decode(msg);
         console.log(msg);
-
-        ws.send("Hello back");
-    })
-
-    ws.on('data', function(data)
-    {
-        var json = JSON.parse(data);
-        console.log(json);
+        try {
+            var json = JSON.parse(msg);
+        } catch (error) {
+            return;
+        }
+        
         var playerId = json.player_id;
         var action = json.action;
         
@@ -55,12 +78,17 @@ app.ws('/', function(ws, req)
             case "join-lobby":
             {
                 var lobbyId = json.lobby_id;
-                if(lobbies[lobbyId] != undefined)
+                var lobby = lobbies[lobbyId];
+                if(lobby != undefined)
                 {
-                    lobbies[lobbyId].players.push({"id" : playerId, "entered_word" : "", "score" : 0, "websocket" : ws});
-                    var response = {"action" : "lobby-joined", "lobbyId" : lobbyId}
+                    var playerJoined = {"action" : "player-joined", "player_id" : playerId};
+                    lobby.players.forEach(player => player.websocket.send(JSON.stringify(playerJoined)));
+
+                    lobby.players.push({"id" : playerId, "entered_word" : "", "score" : 0, "websocket" : ws});
+                    var response = {"action" : "lobby-joined", "lobby_id" : lobbyId}
                     ws.send(JSON.stringify(response));
-                }   
+                }
+                break;  
             }
 
             case "leave-lobby":
@@ -70,7 +98,7 @@ app.ws('/', function(ws, req)
                 if(lobby != undefined)
                 {
                     lobby.players = lobby.players.filter(player => player.id != playerId);
-                    var response = {"action" : "lobby-left", "lobbyId" : lobbyId}
+                    var response = {"action" : "lobby-left", "lobby_id" : lobbyId}
                     ws.send(JSON.stringify(response));
 
                     lobby.players.forEach(player => 
@@ -79,19 +107,20 @@ app.ws('/', function(ws, req)
                         player.websocket.send(JSON.stringify(playerLeft));
                     });
                 }
+                break;
             }
-
             case "disband-lobby":
             {
                 var lobbyId = json.lobby_id;
                 var lobby = lobbies[lobbyId];
                 if(lobby != undefined && lobby.owner == playerId)
                 {
-                    var response = {"action" : "lobby-disbanded", "lobbyId" : lobbyId}
+                    var response = {"action" : "lobby-disbanded", "lobby_id" : lobbyId}
                     lobby.players.forEach(player => player.websocket.send(JSON.stringify(response)));
 
                     delete lobbies[lobbyId];
                 }
+                break;
             }
 
             case "start-lobby":
@@ -101,9 +130,10 @@ app.ws('/', function(ws, req)
                 if(lobby != undefined && lobby.owner == playerId)
                 {
                     lobby.status = "started";
-                    var response = {"action" : "lobby-started", "lobbyId" : lobbyId}
+                    var response = {"action" : "lobby-started", "lobby_id" : lobbyId}
                     lobby.players.forEach(player => player.websocket.send(JSON.stringify(response)));
                 }
+                break;
             }
 
             case "send-word":
@@ -156,37 +186,37 @@ app.ws('/', function(ws, req)
                         lobby.players.forEach(player => player.websocket.send(JSON.stringify(newWord)));
                     }
                 }
+            break;
             }
         }
     })
 });
 
-let con = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "vocab_test"
-});
-
-const corsOption =
-{
-    origin: '*',
-    optionsSuccessStatus: 200
-}
-
-app.use(cors(corsOption))
-app.set('port', process.env.PORT || 5762);
-
-// create application/json parser
-var jsonParser = bodyParser.json()
- 
-// create application/x-www-form-urlencoded parser
-var urlencodedParser = bodyParser.urlencoded({ extended: false })
-
 app.get('/vocab-test', (req, res) => 
 {
     res.send({"action" : "set-words", "words" : getWords()});
 });
+
+app.get('/lobbies', (req, res) => 
+{
+    console.log(lobbies);
+
+    var lobbiesJson = [];
+    Object.keys(lobbies).forEach(function(lobbyId)
+    {
+        var lobbyJson = {};
+        var lobby = lobbies[lobbyId];
+        lobbyJson["id"] = lobbyId;
+        lobbyJson["owner"] = lobby.owner;
+        lobbyJson["player_count"] = lobby.players.length;
+        lobbyJson["words"] = lobby.words;
+        lobbyJson["current_word_index"] = lobby.current_word_index;
+        lobbyJson["status"] = lobby.status;
+        lobbiesJson.push(lobbyJson);
+    });
+
+  res.send({"action" : "set-lobbies", "lobbies" : lobbiesJson});  
+})
 
 function getWords()
 {
@@ -221,5 +251,6 @@ function shuffle(array)
 }
 
 app.listen(app.get('port'));
+wsApp.listen(wsApp.get('port'));   
 
 console.log("Server running !");
