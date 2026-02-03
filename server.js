@@ -5,6 +5,7 @@ import bodyParser from 'body-parser'
 import cors from 'cors'
 
 var lobbies = [];
+var cachedWords = [];
 
 let con = mysql.createConnection({
     host: "localhost",
@@ -54,10 +55,11 @@ wsApp.ws('/', function(ws, req)
         {
             case "create-lobby":
             {
-                var lobbyId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                let lobbyId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                
 
-                var words = shuffle(getWords());
-
+                let organisedWords = getWords()                
+                let words = shuffle(organisedWords)
                 lobbies[lobbyId] = 
                 {
                     "owner" : playerId,
@@ -70,22 +72,30 @@ wsApp.ws('/', function(ws, req)
                     "status" : "waiting"
                 };
 
-                var response = {"action" : "lobby-created", "lobbyId" : lobbyId}
+                let response = {"action" : "lobby-created", "lobby_id" : lobbyId}
                 ws.send(JSON.stringify(response));
-                break;
+                
+
+               break;
             }
 
             case "join-lobby":
             {
-                var lobbyId = json.lobby_id;
-                var lobby = lobbies[lobbyId];
+                let lobbyId = json.lobby_id;
+                let lobby = lobbies[lobbyId];
                 if(lobby != undefined)
                 {
-                    var playerJoined = {"action" : "player-joined", "player_id" : playerId};
+                    if(lobby.players.filter(player => player.id == playerId).length != 0)
+                    {
+                        console.warn("Player has already joined !");
+                        break;
+                    }
+
+                    let playerJoined = {"action" : "player-joined", "player_id" : playerId};
                     lobby.players.forEach(player => player.websocket.send(JSON.stringify(playerJoined)));
 
                     lobby.players.push({"id" : playerId, "entered_word" : "", "score" : 0, "websocket" : ws});
-                    var response = {"action" : "lobby-joined", "lobby_id" : lobbyId}
+                    let response = {"action" : "lobby-joined", "lobby_id" : lobbyId}
                     ws.send(JSON.stringify(response));
                 }
                 break;  
@@ -93,17 +103,17 @@ wsApp.ws('/', function(ws, req)
 
             case "leave-lobby":
             {
-                var lobbyId = json.lobby_id;
-                var lobby = lobbies[lobbyId];
+                let lobbyId = json.lobby_id;
+                let lobby = lobbies[lobbyId];
                 if(lobby != undefined)
                 {
                     lobby.players = lobby.players.filter(player => player.id != playerId);
-                    var response = {"action" : "lobby-left", "lobby_id" : lobbyId}
+                    let response = {"action" : "lobby-left", "lobby_id" : lobbyId}
                     ws.send(JSON.stringify(response));
 
                     lobby.players.forEach(player => 
                     {
-                        var playerLeft = {"action" : "player-left", "player_id" : playerId};
+                        let playerLeft = {"action" : "player-left", "player_id" : playerId};
                         player.websocket.send(JSON.stringify(playerLeft));
                     });
                 }
@@ -111,11 +121,11 @@ wsApp.ws('/', function(ws, req)
             }
             case "disband-lobby":
             {
-                var lobbyId = json.lobby_id;
-                var lobby = lobbies[lobbyId];
+                let lobbyId = json.lobby_id;
+                let lobby = lobbies[lobbyId];
                 if(lobby != undefined && lobby.owner == playerId)
                 {
-                    var response = {"action" : "lobby-disbanded", "lobby_id" : lobbyId}
+                    let response = {"action" : "lobby-disbanded", "lobby_id" : lobbyId}
                     lobby.players.forEach(player => player.websocket.send(JSON.stringify(response)));
 
                     delete lobbies[lobbyId];
@@ -125,29 +135,34 @@ wsApp.ws('/', function(ws, req)
 
             case "start-lobby":
             {
-                var lobbyId = json.lobby_id;
-                var lobby = lobbies[lobbyId];
+                let lobbyId = json.lobby_id;
+                let lobby = lobbies[lobbyId];
                 if(lobby != undefined && lobby.owner == playerId)
                 {
                     lobby.status = "started";
-                    var response = {"action" : "lobby-started", "lobby_id" : lobbyId}
+                    let response = {"action" : "lobby-started", "lobby_id" : lobbyId}
                     lobby.players.forEach(player => player.websocket.send(JSON.stringify(response)));
+
+                    lobby.current_word_index = 0;
+                    let current_word = lobby.words[lobby.current_word_index];
+                    let newWord = {"action" : "new-word", "word" : current_word}
+                    lobby.players.forEach(player => player.websocket.send(JSON.stringify(newWord)));
                 }
                 break;
             }
 
             case "send-word":
             {
-                var lobbyId = json.lobby_id;
-                var lobby = lobbies[lobbyId];
+                let lobbyId = json.lobby_id;
+                let lobby = lobbies[lobbyId];
                 if(lobby != undefined)
                 {
-                    var word = json.word;
-                    var response = {"action" : "word-received", "word" : word}
+                    let word = json.word;
+                    let response = {"action" : "word-received", "word" : word}
                     ws.send(JSON.stringify(response));
 
                     lobby.players[json.player_id].entered_word = word;
-                    var players_all_played = true;
+                    let players_all_played = true;
                     lobby.players.forEach(player => 
                     {
                          if(player.entered_word == "")
@@ -156,7 +171,7 @@ wsApp.ws('/', function(ws, req)
 
                     if(players_all_played)
                     {
-                        var updatedScores = [];
+                        let updatedScores = [];
                         lobby.players.forEach(player =>
                         {
                             if(player.entered_word == lobby.words[lobby.current_word_index].english_word)
@@ -167,7 +182,7 @@ wsApp.ws('/', function(ws, req)
                             }
                         });
                         
-                        var updateScores = {"action" : "update-scores", "scores" : updatedScores};
+                        let updateScores = {"action" : "update-scores", "scores" : updatedScores};
                         lobby.players.forEach(player => player.websocket.send(JSON.stringify(updateScores)));
 
                         //choose new word
@@ -176,13 +191,13 @@ wsApp.ws('/', function(ws, req)
                         if(lobby.current_word_index >= lobby.words.length)
                         {
                             lobby.status = "ended";
-                            var endGame = {"action" : "end-game"};
+                            let endGame = {"action" : "end-game"};
                             lobby.players.forEach(player => player.websocket.send(JSON.stringify(endGame)));
                             return;
                         }
 
-                        lobby.current_word = lobby.words[lobby.current_word_index];
-                        var newWord = {"action" : "new-word", "word" : lobby.current_word.french_word}
+                        let current_word = lobby.words[lobby.current_word_index];
+                        let newWord = {"action" : "new-word", "word" : current_word}
                         lobby.players.forEach(player => player.websocket.send(JSON.stringify(newWord)));
                     }
                 }
@@ -199,7 +214,7 @@ app.get('/vocab-test', (req, res) =>
 
 app.get('/lobbies', (req, res) => 
 {
-    console.log(lobbies);
+    //console.log(lobbies);
 
     var lobbiesJson = [];
     Object.keys(lobbies).forEach(function(lobbyId)
@@ -218,39 +233,55 @@ app.get('/lobbies', (req, res) =>
   res.send({"action" : "set-lobbies", "lobbies" : lobbiesJson});  
 })
 
+app.get('/owner', jsonParser, (req, res) => 
+{
+    var lobby_id = req.body["lobby_id"];
+    var lobby = lobbies[lobby_id]
+    if(lobby == undefined)
+    {
+        res.send({"action" : "test-ownership", "result" : false});
+        return;
+    }    
+    res.send({"action" : "test-ownership", "result" : lobby.owner == req.body["player_id"]});
+});
+
 function getWords()
 {
-    var words = [];
     con.connect(function(err)
     {
         if(err) throw err;
-        !async function () {
-                var query = "SELECT * FROM `words`";
-                var [rows, fields] = await con.promise().query(query);
-                words = rows;
-            }
+        !async function () 
+        {
+            var query = "SELECT * FROM `words`";
+            var [rows, fields] = await con.promise().query(query);
+            cachedWords = rows;
+        }();
     })
-    return words;
+    return cachedWords;
 }
 
 function shuffle(array) 
 {
-  let currentIndex = array.length;
+    let arrayCopy = array
+    let currentIndex = arrayCopy.length;
 
-  // While there remain elements to shuffle...
-  while (currentIndex != 0) {
+    // While there remain elements to shuffle...
+    while (currentIndex != 0) {
 
-    // Pick a remaining element...
-    let randomIndex = Math.floor(Math.random() * currentIndex);
-    currentIndex--;
+        // Pick a remaining element...
+        let randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
 
-    // And swap it with the current element.
-    [array[currentIndex], array[randomIndex]] = [
-      array[randomIndex], array[currentIndex]];
-  }
+        // And swap it with the current element.
+        [arrayCopy[currentIndex], arrayCopy[randomIndex]] = [
+        arrayCopy[randomIndex], arrayCopy[currentIndex]];
+    }
+    return arrayCopy
 }
 
 app.listen(app.get('port'));
 wsApp.listen(wsApp.get('port'));   
 
 console.log("Server running !");
+
+getWords();
