@@ -61,7 +61,11 @@ wsApp.ws("/", function (ws, req) {
 
 			case "join-lobby": {
 				if (joinLobby(lobbyId, playerId, ws)) {
-					let response = { action: "lobby-joined", lobby_id: lobbyId };
+					let currentLobbyPlayers = lobbies[lobbyId].players.map((player) => {
+						return { player_id: player.id, score: player.score };
+					});
+
+					let response = { action: "lobby-joined", lobby_id: lobbyId, current_lobby_players: currentLobbyPlayers };
 					ws.send(JSON.stringify(response));
 				}
 				break;
@@ -177,6 +181,7 @@ function createLobby(playerId, ownerWebsocket) {
 		players: [],
 		words: words,
 		current_word_index: 0,
+		players_submitted_word: 0,
 		status: "waiting",
 	};
 
@@ -277,60 +282,68 @@ function receiveWord(lobbyId, playerId, word) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
 
+	let player = lobby.players.find(p => p.id === playerId);
+	if (player == undefined) return;
+
 	let response = { action: "word-received", word: word };
-	ws.send(JSON.stringify(response));
+	player.websocket.send(JSON.stringify(response));
 
-	lobby.players[playerId].entered_word = word;
+	player.entered_word = word;
+	lobby.players_submitted_word += 1;
 
-	checkPlayerEnterWords(lobbyId);
+	if(lobby.players_submitted_word >= lobby.players.length) 
+	{
+		updateScores(lobbyId);
+	}
+
+	//checkPlayerEnterWords(lobbyId);
 }
 
-function checkPlayerEnterWords(lobbyId) {
+function updateScores(lobbyId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
-
-	let players_all_played = true;
+	
+	let updatedScores = [];
 	lobby.players.forEach((player) => {
-		if (player.entered_word == "") players_all_played = false;
-	});
-
-	if (players_all_played) {
-
-        let updatedScores = [];
-		lobby.players.forEach((player) => {
-            let valid = checkWord(player.entered_word, lobby.words[lobby.current_word_index].english_word);
-			if (valid) {
-				player.entered_word = "";
-				player.score += 1;
-				updatedScores.push({
-					player_id: player.id,
-					new_score: player.score,
-				});
-			}
-
-            let showResults = { action: "show-results", valid: valid };
-			player.websocket.send(JSON.stringify(showResults));
+		let valid = checkWord(player.entered_word, lobby.words[lobby.current_word_index].anglais);
+		player.entered_word = "";
+		player.score += valid ? 1 : 0;
+		updatedScores.push({
+			player_id: player.id,
+			new_score: player.score,
 		});
 
-		let updateScores = {
-			action: "update-scores",
-			scores: updatedScores,
-		};
-		lobby.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
-	}
+		let showResults = { action: "show-results", valid: valid };
+		player.websocket.send(JSON.stringify(showResults));
+	});
+	lobby.players_submitted_word = 0;
+
+	let updateScores = {
+		action: "update-scores",
+		scores: updatedScores,
+	};
+	lobby.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
+	
 }
 
 function playerRequestedNextWord(lobbyId, playerId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
 
-	if (lobby.players[playerId].entered_word !== "") lobby.players[playerId].ready_for_next_word = true;
+	let player = lobby.players.find(player => player.id === playerId)
+	if(player == undefined) return;
+
+	player.ready_for_next_word = true;
 
 	let allReady = true;
 	lobby.players.forEach((player) => {
 		if (!player.ready_for_next_word) allReady = false;
 	});
-	if (allReady) nextWord(lobbyId);
+
+	if (allReady){ 
+		updateScores(lobbyId);
+		nextWord(lobbyId)
+	};
 }
 
 function checkWord(playerWord, correctWordList) {
