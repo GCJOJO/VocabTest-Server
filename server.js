@@ -38,44 +38,48 @@ wsApp.ws("/", function (ws, req) {
 			return;
 		}
 
-		var playerId = json.player_id;
-		var action = json.action;
-		var lobbyId = json.lobby_id;
+		try {
+			var playerId = json.player_id;
+			var action = json.action;
+			var lobbyId = json.lobby_id;
 
-		switch (action) {
-			case "create-lobby": {
-				let response = {
-					action: "lobby-created",
-					lobby_id: GameManager.createLobby(playerId, ws),
-				};
-				ws.send(JSON.stringify(response));
-				break;
-			}
+			switch (action) {
+				case "create-lobby": {
+					let response = {
+						action: "lobby-created",
+						lobby_id: GameManager.createLobby(playerId, ws),
+					};
+					ws.send(JSON.stringify(response));
+					break;
+				}
 
-			case "join-lobby": {
-				GameManager.joinLobby(lobbyId, playerId, ws);
-				break;
-			}
+				case "join-lobby": {
+					GameManager.joinLobby(lobbyId, playerId, ws);
+					break;
+				}
 
-			case "leave-lobby": {
-				GameManager.leaveLobby(lobbyId, playerId);
-				break;
-			}
+				case "leave-lobby": {
+					GameManager.leaveLobby(lobbyId, playerId);
+					break;
+				}
 
-			case "start-lobby": {
-				GameManager.startLobby(lobbyId, playerId);
-				break;
-			}
+				case "start-lobby": {
+					GameManager.startLobby(lobbyId, playerId);
+					break;
+				}
 
-			case "send-word": {
-				GameManager.receiveWord(lobbyId, playerId, json.word);
-				break;
-			}
+				case "send-word": {
+					GameManager.receiveWord(lobbyId, playerId, json.word);
+					break;
+				}
 
-			case "request-next-word": {
-				GameManager.playerRequestedNextWord(lobbyId, playerId);
-				break;
+				case "request-next-word": {
+					GameManager.playerRequestedNextWord(lobbyId, playerId);
+					break;
+				}
 			}
+		} catch (error) {
+			console.error("Error handling WebSocket message:", error);
 		}
 	});
 });
@@ -92,24 +96,29 @@ app.post("/add-word", jsonParser, (req, res) => {
 app.post("/register", jsonParser, async (req, res) => {
 	console.log(req);
 	var result = await UserManager.createUser(req.body.username, req.body.first_name, req.body.last_name, req.body.password_hash);
-	if(result.success)
-		res.send({ action: "login-success", user_uuid: result.uuid });
-	else
-		res.send({ action: "login-failed" });
+	if (result.success) res.send({ action: "login-success", user_uuid: result.uuid });
+	else res.send({ action: "login-failed" });
 });
 
 app.post("/login", jsonParser, async (req, res) => {
 	var result = await UserManager.login(req.body.username, req.body.password_hash);
-	if(result.success)
-		res.send({ action: "login-success", user_uuid: result.uuid });
-	else
-		res.send({ action: "login-failed" });
+	if (result.success) res.send({ action: "login-success", user_uuid: result.uuid });
+	else res.send({ action: "login-failed" });
 });
 
-app.get("/user-info", jsonParser, async (req, res) => {
-	var result = await UserManager.getUserInfo(req.query.user_id);
-	if(result.success)			res.send({ action: "user-info", user_info: result.user_info });
-	else						res.send({ action: "user-info-failed" });
+app.get("/users", jsonParser, async (req, res) => {
+	var userIds = req.body.user_ids;
+	var result = await UserManager.getUsersInfo(userIds);
+	if (result.success) res.send({ action: "users-info", users_info: result.users_info });
+	else
+		res.send({ action: "users-info-failed" });
+});
+
+// SERVER-ADDRESS/user/<user_id>
+app.get("/user/:user_id", async (req, res) => {
+	var result = await UserManager.getUserInfo(req.params.user_id);
+	if (result.success) res.send({ action: "user-info", user_info: result.user_info });
+	else res.send({ action: "user-info-failed" });
 });
 
 app.get("/lobbies", (req, res) => {

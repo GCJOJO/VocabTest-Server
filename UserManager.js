@@ -28,3 +28,11 @@ export async function getUserInfo(user_id)
         return { success: true, user_info: result.user_info };
     return { success: false };
 }
+
+export async function getUsersInfo(user_ids)
+{
+    let result = await DatabaseConnection.getUsersInfo(user_ids);
+    if(result.success)
+        return { success: true, users_info: result.users_info };
+    return { success: false };
+}

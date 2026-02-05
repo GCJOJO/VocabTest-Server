@@ -1,4 +1,5 @@
 import * as Utils from "./Utils.js";
+import * as UserManager from "./UserManager.js";
 import * as DatabaseConnection from "./DatabaseConnection.js";
 
 var lobbies = [];
@@ -57,18 +58,25 @@ export function joinLobby(lobbyId, playerId, playerWebsocket)
 export function leaveLobby(lobbyId, playerId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby != undefined) {
-        let leavingPlayer = lobby.players.filter((player) => player.id == playerId);
+        let leavingPlayer = lobby.players.find((player) => player.id == playerId);
+		let response = { action: "lobby-left", lobby_id: lobbyId };
+		leavingPlayer.websocket.send(JSON.stringify(response));
 
 		lobby.players = lobby.players.filter((player) => player.id != playerId);
+
 		lobby.players.forEach((player) => {
 			let playerLeft = { action: "player-left", player_id: playerId };
 			player.websocket.send(JSON.stringify(playerLeft));
 		});
 
-        let response = { action: "lobby-left", lobby_id: lobbyId };
-        leavingPlayer.websocket.send(JSON.stringify(response));
 
         if (lobbies[lobbyId].players.length == 0) disbandLobby(lobbyId);
+		else if (lobby.owner == playerId) 
+		{
+			lobby.owner = lobby.players[0].id;
+			let newOwner = { action: "new-owner", player_id: lobby.owner };
+			lobby.players.forEach((player) => player.websocket.send(JSON.stringify(newOwner)));
+		}
 
 		return true;
 	}
@@ -217,7 +225,7 @@ export function getLobbies()
 		lobbyJson["id"] = lobbyId;
 		lobbyJson["owner"] = lobby.owner;
 		lobbyJson["player_count"] = lobby.players.length;
-		lobbyJson["words"] = lobby.words;
+		//lobbyJson["words"] = lobby.words;
 		lobbyJson["current_word_index"] = lobby.current_word_index;
         lobbyJson["players_submitted_word"] = lobby.players_submitted_word;
 		lobbyJson["status"] = lobby.status;
