@@ -7,3 +7,24 @@ export async function createUser(username, first_name, last_name, password_hash)
     let result = await DatabaseConnection.createUser(uuid, username, first_name, last_name, password_hash);
     return { success: result, uuid: uuid };
 }
+
+export async function login(username, password_hash)
+{
+    try {
+        let result = await DatabaseConnection.login(username, password_hash);
+        if(result.success)
+            return { success: true, uuid: result.uuid };
+        return { success: false };
+    } catch (error) {
+        console.error("Error in login:", error);
+        return { success: false };
+    }
+}
+
+export async function getUserInfo(user_id)
+{
+    let result = await DatabaseConnection.getUserInfo(user_id);
+    if(result.success)
+        return { success: true, user_info: result.user_info };
+    return { success: false };
+}

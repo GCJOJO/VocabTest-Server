@@ -1,6 +1,6 @@
 import express from "express";
 import expressWs from "express-ws";
-import bodyParser, { json } from "body-parser";
+import bodyParser from "body-parser";
 import cors from "cors";
 
 import * as GameManager from "./GameManager.js";
@@ -89,15 +89,27 @@ app.post("/add-word", jsonParser, (req, res) => {
 	res.send({ action: "word-added", word: { français: req.params.french, contexte: req.params.context, anglais: req.params.english } });
 });
 
-app.post("/create-user", jsonParser, (req, res) => {
-	!async function () {
-		var result = await UserManager.createUser(req.params.username, req.params.first_name, req.params.last_name, req.params.password_hash);
-		if(result.success)
-			res.send({ action: "user-created", user_uuid: result.uuid });
-		else
-			res.send({ action: "user-creation-failed" });
-	}();
+app.post("/register", jsonParser, async (req, res) => {
+	console.log(req);
+	var result = await UserManager.createUser(req.body.username, req.body.first_name, req.body.last_name, req.body.password_hash);
+	if(result.success)
+		res.send({ action: "login-success", user_uuid: result.uuid });
+	else
+		res.send({ action: "login-failed" });
+});
 
+app.post("/login", jsonParser, async (req, res) => {
+	var result = await UserManager.login(req.body.username, req.body.password_hash);
+	if(result.success)
+		res.send({ action: "login-success", user_uuid: result.uuid });
+	else
+		res.send({ action: "login-failed" });
+});
+
+app.get("/user-info", jsonParser, async (req, res) => {
+	var result = await UserManager.getUserInfo(req.query.user_id);
+	if(result.success)			res.send({ action: "user-info", user_info: result.user_info });
+	else						res.send({ action: "user-info-failed" });
 });
 
 app.get("/lobbies", (req, res) => {
