@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 export function shuffle(array) {
     let arrayCopy = array;
     let currentIndex = arrayCopy.length;

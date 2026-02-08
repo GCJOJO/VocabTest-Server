@@ -2,9 +2,9 @@ import mysql from "mysql2";
 
 let con = mysql.createConnection({
 	host: "localhost",
-	user: "root",
-	password: "",
-	database: "vocab_test",
+	user: "vocab-test",
+	password: "bonjoirjesuisleservernode",
+	database: "vocab-test",
 });
 
 var cachedWords = [];

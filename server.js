@@ -2,6 +2,19 @@ import express from "express";
 import expressWs from "express-ws";
 import bodyParser from "body-parser";
 import cors from "cors";
+import fs from "fs";
+import https from "https";
+var privateKey  = fs.readFileSync('server.key', 'utf8');
+var certificate = fs.readFileSync('server.crt', 'utf8');
+
+const serverPort = 5762;
+const wsServerPort = 5763;
+
+const credentials = {
+  key: privateKey,
+  cert: certificate,
+  passphrase: "feurestunstegosaure"
+};
 
 import * as GameManager from "./GameManager.js";
 import * as DatabaseConnection from "./DatabaseConnection.js";
@@ -15,12 +28,17 @@ const corsOption = {
 const app = express();
 
 app.use(cors(corsOption));
-app.set("port", process.env.PORT || 5762);
+//app.set("port", process.env.PORT || 5762);
+
+var httpsServer = https.createServer(credentials, app);
+
 
 const wsApp = express();
 wsApp.use(cors(corsOption));
 wsApp.set("port", process.env.PORT || 5763);
-expressWs(wsApp);
+var wsHttpsServer = https.createServer(credentials, wsApp);
+expressWs(wsApp, wsHttpsServer);
+
 
 // create application/json parser
 var jsonParser = bodyParser.json();
@@ -195,8 +213,14 @@ app.get("/owner/:lobby_id", jsonParser, (req, res) => {
 	}
 });
 
-app.listen(app.get("port"));
-wsApp.listen(wsApp.get("port"));
+//app.listen(app.get("port"));
+httpsServer.listen(serverPort, () => {
+	console.log(`HTTPS Server running on port ${serverPort}`);
+});
+
+wsHttpsServer.listen(wsServerPort, () => {
+	console.log(`WebSocket HTTPS Server running on port ${wsServerPort}`);
+});
 
 console.log("Server running !");
 
