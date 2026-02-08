@@ -28,6 +28,7 @@ const corsOption = {
 const app = express();
 
 app.use(cors(corsOption));
+app.use(express.static("public"));
 //app.set("port", process.env.PORT || 5762);
 
 var httpsServer = https.createServer(credentials, app);
@@ -120,13 +121,37 @@ app.get("/vocab-test", (req, res) => {
 
 app.post("/add-word", jsonParser, (req, res) => {
 	try{
-		DatabaseConnection.addWord(req.params.french, req.params.context, req.params.english);
-		res.send({ action: "word-added", word: { français: req.params.french, contexte: req.params.context, anglais: req.params.english } });
+		DatabaseConnection.addWord(req.body.french, req.body.context, req.body.english);
+		res.send({ action: "word-added", word: { français: req.body.french, contexte: req.body.context, anglais: req.body.english } });
 	}
 	catch(error)
 	{
 		console.error("Error adding word:", error);
 		res.send({ action: "add-word-failed" });
+	}
+});
+
+app.post("/change-word", jsonParser, (req, res) => {
+	try{
+		DatabaseConnection.changeWord(req.body.id, req.body.french, req.body.context, req.body.english);
+		res.send({ action: "word-changed", word: { français: req.body.french, contexte: req.body.context, anglais: req.body.english } });
+	}
+	catch(error)
+	{
+		console.error("Error changing word:", error);
+		res.send({ action: "change-word-failed" });
+	}
+});
+
+app.post("/remove-word", jsonParser, (req, res) => {
+	try{
+		DatabaseConnection.removeWord(req.body.id);
+		res.send({ action: "word-removed", word: { id: req.body.id } });
+	}
+	catch(error)
+	{
+		console.error("Error removing word:", error);
+		res.send({ action: "remove-word-failed" });
 	}
 });
 

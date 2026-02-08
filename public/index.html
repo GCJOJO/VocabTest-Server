@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vocab Test - Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="kicker">Vocab Test</p>
+          <h1>Gestion des mots</h1>
+          <p class="subhead">
+            Liste, ajoute, modifie ou supprime des mots en temps reel.
+          </p>
+        </div>
+        <div class="stats" aria-live="polite">
+          <div class="stat">
+            <span class="stat-label">Total</span>
+            <span class="stat-value" id="total-count">0</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Ajouter ou modifier</h2>
+          <p>Le formulaire sert aussi pour les modifications.</p>
+        </div>
+        <form id="word-form" class="word-form">
+          <label id="id-field">
+            ID
+            <input id="word-id" name="id" type="text" readonly />
+          </label>
+          <label>
+            Francais
+            <input id="word-french" name="french" type="text" required />
+          </label>
+          <label>
+            Contexte
+            <input id="word-context" name="context" type="text" required />
+          </label>
+          <label>
+            Anglais
+            <input id="word-english" name="english" type="text" required />
+          </label>
+          <div class="form-actions">
+            <button class="primary" type="submit" id="save-button">Ajouter</button>
+            <button class="ghost" type="button" id="cancel-edit">Annuler</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel list-panel">
+        <div class="panel-header">
+          <h2>Liste des mots</h2>
+          <div class="filters">
+            <input
+              id="search-input"
+              type="search"
+              placeholder="Rechercher un mot ou un contexte"
+              aria-label="Rechercher"
+            />
+            <div class="select-group">
+              <label for="sort-select">Tri</label>
+              <select id="sort-select">
+                <option value="id:asc">ID (croissant)</option>
+                <option value="id:desc">ID (decroissant)</option>
+                <option value="fr:asc">Francais (A-Z)</option>
+                <option value="fr:desc">Francais (Z-A)</option>
+                <option value="en:asc">Anglais (A-Z)</option>
+                <option value="en:desc">Anglais (Z-A)</option>
+                <option value="context:asc">Contexte (A-Z)</option>
+                <option value="context:desc">Contexte (Z-A)</option>
+              </select>
+            </div>
+            <div class="select-group">
+              <label for="page-size">Par page</label>
+              <select id="page-size">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+            <button class="ghost" type="button" id="refresh">Rafraichir</button>
+          </div>
+        </div>
+        <div class="table" role="table" aria-label="Mots">
+          <div class="table-row table-head" role="row">
+            <div class="cell sortable" role="columnheader" data-sort="id">ID</div>
+            <div class="cell sortable" role="columnheader" data-sort="fr">Francais</div>
+            <div class="cell sortable" role="columnheader" data-sort="context">Contexte</div>
+            <div class="cell sortable" role="columnheader" data-sort="en">Anglais</div>
+            <div class="cell actions" role="columnheader">Actions</div>
+          </div>
+          <div id="word-list" class="table-body" role="rowgroup"></div>
+        </div>
+        <div class="pagination">
+          <button class="ghost" type="button" id="prev-page">Precedent</button>
+          <span id="page-info">Page 1</span>
+          <button class="ghost" type="button" id="next-page">Suivant</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

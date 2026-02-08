@@ -33,6 +33,31 @@ export function addWord(french, context, english) {
 	});
 }
 
+export function changeWord(id, french, context, english) {
+	con.connect(function (err) {
+		if (err) throw err;
+		!(async function () {
+			var query = "UPDATE `words` SET `français` = ?, `contexte` = ?, `anglais` = ? WHERE `identifiant` = ?";
+			var result = await con.promise().query(query, [french, context, english, id]);
+			var affectedRows = result[0].affectedRows;
+			console.log(affectedRows + " record(s) updated");
+		}
+	)();
+});
+}
+
+export function removeWord(id) {
+	con.connect(function (err) {
+		if (err) throw err;
+		!(async function () {
+			var query = "DELETE FROM `words` WHERE `identifiant` = ?";
+			var result = await con.promise().query(query, [id]);
+			var affectedRows = result[0].affectedRows;
+			console.log(affectedRows + " record(s) deleted");
+		})();
+	});
+}
+
 export async function createUser(uuid, username, first_name, last_name, password_hash) {
 	return new Promise((resolve, reject) => {
 		con.connect(function (err) {
