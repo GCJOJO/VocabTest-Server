@@ -235,8 +235,13 @@ export function playerRequestedNextWord(lobbyId, playerId) {
 	});
 
 	if (allReady) {
-		updateScores(lobbyId);
-		nextWord(lobbyId)
+		if (lobby.current_word_index >= lobby.options.max_words - 1)
+		{
+			let endGame = { action: "end-game" };
+			lobby.players.forEach((player) => player.websocket.send(JSON.stringify(endGame)));
+			return;
+		}
+		nextWord(lobbyId);
 	};
 }
 
