@@ -35,6 +35,11 @@ export function createLobby(playerId, ownerWebsocket) {
 export function joinLobby(lobbyId, playerId, playerWebsocket) {
 	let lobby = lobbies[lobbyId];
 	if (lobby != undefined) {
+		if (lobby.status != "waiting") {
+			console.warn("Player tried to join a lobby that already started !");
+			return false;
+		}
+
 		if (lobby.players.filter((player) => player.id == playerId).length != 0) {
 			console.warn("Player has already joined !");
 			return false;
@@ -73,8 +78,11 @@ export function leaveLobby(lobbyId, playerId) {
 		let response = { action: "lobby-left", lobby_id: lobbyId };
 		leavingPlayer.websocket.send(JSON.stringify(response));
 
-		lobby.players = lobby.players.filter((player) => player.id != playerId);
+		if (lobby.status == "started" && leavingPlayer.entered_word == "")
+			receiveWord(lobbyId, playerId, "");
 
+		lobby.players = lobby.players.filter((player) => player.id != playerId);
+	
 		lobby.players.forEach((player) => {
 			let playerLeft = { action: "player-left", player_id: playerId };
 			player.websocket.send(JSON.stringify(playerLeft));
@@ -314,7 +322,6 @@ cron.schedule("* * * * * *", () => {
 		var lobby = lobbies[lobbyId];
 		if (lobby.status == "started" && lobby.options.round_timer != -1) {
 			lobby.current_round_timer++;
-			//console.log("Lobby " + lobbyId + " round timer : " + lobby.current_round_timer);
 			let timerUpdate = { action: "timer-update", current_round_timer: lobby.current_round_timer };
 			lobby.players.forEach((player) => player.websocket.send(JSON.stringify(timerUpdate)));
 			if (lobby.current_round_timer >= lobby.options.round_timer) {
@@ -329,21 +336,17 @@ cron.schedule("* * * * * *", () => {
 });
 
 // Cleanup lobbies every 30 seconds
-cron.schedule("30 * * * * *", () => {
-	//console.log("Cleaning up old lobbies...");
-	//console.log("Current lobbies (before cleanup) : " + Object.keys(lobbies).length);
+cron.schedule("*/30 * * * * *", () => {
 	var lobbiesBeforeCleanup = Object.keys(lobbies).length;
 	Object.keys(lobbies).forEach(function (lobbyId) {
 		var lobby = lobbies[lobbyId];
-		//console.log("Players in lobby (before cleanup) " + lobbyId + " : " + lobby.players.length);
 		lobby.players.forEach((player) => {
 			if(player.websocket.readyState != 1)
 				leaveLobby(lobbyId, player.id);
+
 		});
-		//console.log("Players in lobby (after cleanup) " + lobbyId + " : " + lobby.players.length);
 	});
-	//console.log("Current lobbies (after cleanup) : " + Object.keys(lobbies).length);
 	let lobbiesCleaned = lobbiesBeforeCleanup - Object.keys(lobbies).length;
 	if(lobbiesCleaned > 0)
-	console.log("Cleaned up " + lobbiesCleaned + " lobbies.");
+		console.log("Cleaned up " + lobbiesCleaned + " lobbies.");
 });

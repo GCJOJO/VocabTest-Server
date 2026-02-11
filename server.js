@@ -108,7 +108,7 @@ wsApp.ws("/", function (ws, req) {
 	});
 });
 
-app.get("/vocab-test", (req, res) => {
+app.get("/word-list", (req, res) => {
 	try
 	{
 		res.send({ action: "set-words", words: DatabaseConnection.getWords() });
@@ -121,8 +121,8 @@ app.get("/vocab-test", (req, res) => {
 
 app.post("/add-word", jsonParser, (req, res) => {
 	try{
-		DatabaseConnection.addWord(req.body.french, req.body.context, req.body.english);
-		res.send({ action: "word-added", word: { français: req.body.french, contexte: req.body.context, anglais: req.body.english } });
+		DatabaseConnection.addWord(req.body.french, req.body.context, req.body.prefix, req.body.english);
+		res.send({ action: "word-added", word: { français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
 	}
 	catch(error)
 	{
@@ -133,8 +133,8 @@ app.post("/add-word", jsonParser, (req, res) => {
 
 app.post("/change-word", jsonParser, (req, res) => {
 	try{
-		DatabaseConnection.changeWord(req.body.id, req.body.french, req.body.context, req.body.english);
-		res.send({ action: "word-changed", word: { français: req.body.french, contexte: req.body.context, anglais: req.body.english } });
+		DatabaseConnection.changeWord(req.body.id, req.body.french, req.body.context, req.body.prefix, req.body.english);
+		res.send({ action: "word-changed", word: { français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
 	}
 	catch(error)
 	{

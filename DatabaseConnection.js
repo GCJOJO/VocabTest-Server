@@ -21,24 +21,24 @@ export function getWords() {
 	return cachedWords;
 }
 
-export function addWord(french, context, english) {
+export function addWord(french, context, prefix, english) {
 	con.connect(function (err) {
 		if (err) throw err;
 		!(async function () {
-			var query = "INSERT INTO `words` (`français`, `contexte`, `anglais`) VALUES (?, ?, ?)";
-			var result = await con.promise().query(query, [french, context, english]);
+			var query = "INSERT INTO `words` (`français`, `contexte`, `prefix` `anglais`) VALUES (?, ?, ?, ?)";
+			var result = await con.promise().query(query, [french, context, prefix, english]);
 			var affectedRows = result[0].affectedRows;
 			console.log(affectedRows + " record(s) inserted");
 		})();
 	});
 }
 
-export function changeWord(id, french, context, english) {
+export function changeWord(id, french, context, prefix, english) {
 	con.connect(function (err) {
 		if (err) throw err;
 		!(async function () {
-			var query = "UPDATE `words` SET `français` = ?, `contexte` = ?, `anglais` = ? WHERE `identifiant` = ?";
-			var result = await con.promise().query(query, [french, context, english, id]);
+			var query = "UPDATE `words` SET `français` = ?, `contexte` = ?, `prefix` = ?, `anglais` = ? WHERE `identifiant` = ?";
+			var result = await con.promise().query(query, [french, context, prefix, english, id]);
 			var affectedRows = result[0].affectedRows;
 			console.log(affectedRows + " record(s) updated");
 		}
