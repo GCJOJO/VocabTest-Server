@@ -5,25 +5,28 @@ import cron from "node-cron";
 
 var lobbies = [];
 
+const MAX_PLAYERS_PER_LOBBY = 10;
+
+const WORD_CATEGORY = 1 << 0;
+const VERB_CATEGORY = 1 << 1;
+
 export function createLobby(playerId, ownerWebsocket) {
 	let lobbyId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
-	let organisedWords = DatabaseConnection.getWords();
-	let words = Utils.shuffle(organisedWords);
 	lobbies[lobbyId] = {
 		owner: playerId,
 		players: [],
-		words: words,
-		current_word_index: 0,
-		players_submitted_word: 0,
+		questions: [],
+		current_question_index: 0,
+		players_submitted_answers: 0,
 		current_round_timer: -1,
 		status: "waiting",
 		options:
 		{
-			"max_words": 10,				// -1 means ALL OF THEM
-			"categories": 16,				//  1000 : pays, 0100 : adverbes, 0010 : verbes, 0001 : vocabulaire
-			"round_timer": 30, 				// timer in seconds, -1 : no timer
-			"similarity_threshold": 0.8		// 0 to 1, how similar the words must be to be considered correct (not implemented yet)
+			"max_words": 10,								// -1 means ALL OF THEM
+			"categories": WORD_CATEGORY | VERB_CATEGORY,	//  1000 : pays, 0100 : adverbes, 0010 : verbes, 0001 : vocabulaire
+			"round_timer": 30, 								// timer in seconds, -1 : no timer
+			"similarity_threshold": 0.8						// 0 to 1, how similar the words must be to be considered correct (not implemented yet)
 		},
 	};
 
@@ -37,11 +40,19 @@ export function joinLobby(lobbyId, playerId, playerWebsocket) {
 	if (lobby != undefined) {
 		if (lobby.status != "waiting") {
 			console.warn("Player tried to join a lobby that already started !");
+			playerWebsocket.send(JSON.stringify({ action: "error", message: "Lobby has already started" }));
+			return false;
+		}
+
+		if (lobby.players.length >= MAX_PLAYERS_PER_LOBBY) {
+			console.warn("Player tried to join a full lobby !");
+			playerWebsocket.send(JSON.stringify({ action: "error", message: "Lobby is full" }));
 			return false;
 		}
 
 		if (lobby.players.filter((player) => player.id == playerId).length != 0) {
 			console.warn("Player has already joined !");
+			playerWebsocket.send(JSON.stringify({ action: "error", message: "Player has already joined" }));
 			return false;
 		}
 
@@ -79,10 +90,10 @@ export function leaveLobby(lobbyId, playerId) {
 		leavingPlayer.websocket.send(JSON.stringify(response));
 
 		if (lobby.status == "started" && leavingPlayer.entered_word == "")
-			receiveWord(lobbyId, playerId, "");
+			receiveAnswer(lobbyId, playerId, "", lobby.questions[lobby.current_question_index].category);
 
 		lobby.players = lobby.players.filter((player) => player.id != playerId);
-	
+
 		lobby.players.forEach((player) => {
 			let playerLeft = { action: "player-left", player_id: playerId };
 			player.websocket.send(JSON.stringify(playerLeft));
@@ -131,72 +142,132 @@ export function disbandLobby(lobbyId) {
 export function startLobby(lobbyId, playerId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby != undefined && lobby.owner == playerId) {
+
+		let randomizedWords = Utils.shuffle(DatabaseConnection.getWords());
+		let randomizedVerbs = Utils.shuffle(DatabaseConnection.getVerbs());
+
+		let questionCategoryAmounts = {};
+		let questionCategoryMaxAmounts = {};
+
+		let questionCategories = [];
+		//console.log("Lobby categories" + lobby.options.categories);
+
+		if(lobby.options.categories == 0)
+		{
+			//console.log("No category selected, adding all categories to the lobby questions pool");
+			lobby.options.categories = WORD_CATEGORY | VERB_CATEGORY;
+		}
+
+		let availableQuestions = 0;
+		if ((lobby.options.categories & WORD_CATEGORY) != 0) {
+			//console.log("Adding words to the lobby questions pool");
+			questionCategories.push(WORD_CATEGORY);
+			questionCategoryAmounts[WORD_CATEGORY] = 0;
+			questionCategoryMaxAmounts[WORD_CATEGORY] = randomizedWords.length;
+			availableQuestions += randomizedWords.length;
+		}
+		if ((lobby.options.categories & VERB_CATEGORY) != 0) {
+			//console.log("Adding verbs to the lobby questions pool");
+			questionCategories.push(VERB_CATEGORY);
+			questionCategoryAmounts[VERB_CATEGORY] = 0;
+			questionCategoryMaxAmounts[VERB_CATEGORY] = randomizedVerbs.length;
+			availableQuestions += randomizedVerbs.length;
+		}
+
+		let maxQuestionAmount = Math.min(lobby.options.max_words, availableQuestions);
+		lobby.options.max_words = maxQuestionAmount;
+
+		for (let i = 0; i < maxQuestionAmount; i++) {
+			let question = null;
+			let randomCategory = -1;
+			while (question == null) {
+				randomCategory = questionCategories[Math.floor(Math.random() * questionCategories.length)];
+				//console.log("Trying to add a question of category " + randomCategory);
+				switch (randomCategory) {
+					case WORD_CATEGORY:
+						if (questionCategoryAmounts[WORD_CATEGORY] >= questionCategoryMaxAmounts[WORD_CATEGORY]) continue;
+						question = randomizedWords[questionCategoryAmounts[WORD_CATEGORY]];
+						questionCategoryAmounts[WORD_CATEGORY]++;
+						break;
+					case VERB_CATEGORY:
+						if (questionCategoryAmounts[VERB_CATEGORY] >= questionCategoryMaxAmounts[VERB_CATEGORY]) continue;
+						question = randomizedVerbs[questionCategoryAmounts[VERB_CATEGORY]];
+						questionCategoryAmounts[VERB_CATEGORY]++;
+						break;
+				}
+			}
+			//console.log("Added question " + question);
+			lobby.questions.push({
+				category: randomCategory,
+				question: question
+			});
+		}
+
 		lobby.status = "started";
 		let response = { action: "lobby-started", lobby_id: lobbyId };
 		lobby.players.forEach((player) => player.websocket.send(JSON.stringify(response)));
 
-		lobby.current_word_index = 0;
-		let current_word = lobby.words[lobby.current_word_index];
-		sendWord(lobbyId, current_word);
+		lobby.current_question_index = 0;
+		let current_question = lobby.questions[lobby.current_question_index];
+		sendQuestion(lobbyId, current_question);
 	}
 }
 
-export function sendWord(lobbyId, word) {
+export function sendQuestion(lobbyId, question) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
 
-	let newWord = { action: "new-word", word: word };
-	lobby.players.forEach((player) => player.websocket.send(JSON.stringify(newWord)));
+	let newQuestion = { action: "new-question", question: question };
+	lobby.players.forEach((player) => player.websocket.send(JSON.stringify(newQuestion)));
 }
 
-export function nextWord(lobbyId) {
+export function nextQuestion(lobbyId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
 
+	if(lobby.status != "waiting-for-next-question") return;
 	lobby.status = "started";
 
-	lobby.players.forEach((player) => (player.ready_for_next_word = false));
-
-	//choose new word
-	lobby.current_word_index += 1;
-
-	if (lobby.current_word_index >= lobby.words.length) {
+	lobby.players.forEach((player) => (player.ready_for_next_answer = false));
+	lobby.current_question_index += 1;
+	if (lobby.current_question_index >= lobby.questions.length) {
 		lobby.status = "ended";
 		let endGame = { action: "end-game" };
 		lobby.players.forEach((player) => player.websocket.send(JSON.stringify(endGame)));
 		return;
 	}
 
-	if(lobby.options.round_timer != -1)
-	{
+	if (lobby.options.round_timer != -1) {
 		lobby.current_round_timer = 0;
 		lobby.players.forEach((player) => player.websocket.send(JSON.stringify({ action: "timer-update", current_round_timer: lobby.current_round_timer })));
 	}
 
-	let current_word = lobby.words[lobby.current_word_index];
-	sendWord(lobbyId, current_word);
+	let current_question = lobby.questions[lobby.current_question_index];
+	sendQuestion(lobbyId, current_question);
 }
 
-export function receiveWord(lobbyId, playerId, word) {
+
+export function receiveAnswer(lobbyId, playerId, answer, answerType) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
 
 	if (lobby.status != "started") return;
 
+	if (answerType != lobby.questions[lobby.current_question_index].category) return;
+
 	let player = lobby.players.find(p => p.id === playerId);
 	if (player == undefined) return;
 
-	let response = { action: "word-received", word: word };
+	let response = { action: "answer-received", answer: answer };
 	player.websocket.send(JSON.stringify(response));
 
-	player.entered_word = word;
-	lobby.players_submitted_word += 1;
+	player.entered_answer = answer;
+	lobby.players_submitted_answers++;
 
-	if (lobby.players_submitted_word >= lobby.players.length) {
+	if (lobby.players_submitted_answers >= lobby.players.length) {
 		updateScores(lobbyId);
+		lobby.status = "waiting-for-next-question";
 	}
-
-	//checkPlayerEnterWords(lobbyId);
 }
 
 export function updateScores(lobbyId) {
@@ -204,53 +275,62 @@ export function updateScores(lobbyId) {
 	if (lobby == undefined) return;
 
 	let updatedScores = [];
+	let currentQuestion = lobby.questions[lobby.current_question_index];
 	lobby.players.forEach((player) => {
-		let wordSimilarity = checkWord(player.entered_word, lobby.words[lobby.current_word_index].anglais, lobby.options.similarity_threshold);
-		player.entered_word = "";
+		let wordSimilarity = checkAnswer(player.entered_answer, currentQuestion.question, currentQuestion.category, lobby.options.similarity_threshold);
+		player.entered_answer = "";
 		player.score += wordSimilarity;
 		updatedScores.push({
 			player_id: player.id,
 			new_score: player.score,
 		});
-		lobby.status = "waiting-for-next-word";
 		let showResults = { action: "show-results", word_similarity: wordSimilarity, similarity_threshold: lobby.options.similarity_threshold };
 		player.websocket.send(JSON.stringify(showResults));
 	});
-	lobby.players_submitted_word = 0;
+	lobby.players_submitted_answers = 0;
 
 	let updateScores = {
 		action: "update-scores",
 		scores: updatedScores,
 	};
 	lobby.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
-
 }
 
-export function playerRequestedNextWord(lobbyId, playerId) {
+export function playerRequestedNextQuestion(lobbyId, playerId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
 
-	if (lobby.status != "waiting-for-next-word") return;
+	if (lobby.status != "waiting-for-next-question") return;
 
 	let player = lobby.players.find(player => player.id === playerId)
 	if (player == undefined) return;
 
-	player.ready_for_next_word = true;
+	player.ready_for_next_answer = true;
 
 	let allReady = true;
 	lobby.players.forEach((player) => {
-		if (!player.ready_for_next_word) allReady = false;
+		if (!player.ready_for_next_answer) allReady = false;
 	});
 
 	if (allReady) {
-		if (lobby.current_word_index >= lobby.options.max_words - 1)
-		{
+		if (lobby.current_question_index >= lobby.options.max_words - 1) {
 			let endGame = { action: "end-game" };
 			lobby.players.forEach((player) => player.websocket.send(JSON.stringify(endGame)));
 			return;
 		}
-		nextWord(lobbyId);
+		nextQuestion(lobbyId);
 	};
+}
+
+export function checkAnswer(playerAnswer, correctAnswer, answerType, lobbyThreshold = 0.80) {
+	switch (answerType) {
+		case WORD_CATEGORY:
+			return checkWord(playerAnswer, correctAnswer.anglais, lobbyThreshold);
+		case VERB_CATEGORY:
+			return checkVerb(playerAnswer, correctAnswer, lobbyThreshold);
+		default:
+			return 0;
+	}
 }
 
 export function checkWord(playerWord, correctWordList, lobbyThreshold = 0.80) {
@@ -261,7 +341,28 @@ export function checkWord(playerWord, correctWordList, lobbyThreshold = 0.80) {
 		minDistance = Math.min(levenshteinDistance(playerWord, correctWord), minDistance);
 	});
 
-	return (1 - minDistance) >= lobbyThreshold ? 1 - minDistance : 0; // Better check, maybe distance
+	return (1 - minDistance) >= lobbyThreshold ? 1 - minDistance : 0; 
+}
+
+export function checkVerb(playerVerb, correctVerb, lobbyThreshold = 0.80) {
+	let infDistance = 1;
+	let preDistance = 1;
+	let ppDistance = 1;
+
+	//console.log("Inf : ", correctVerb.infinitive.split("/"));
+	//console.log("Pre : ", correctVerb.preterit.split("/"));
+	//console.log("PP : ", correctVerb.past_participle.split("/"));
+
+	for(let inf of correctVerb.infinitive.split("/"))
+		infDistance = Math.min(levenshteinDistance(playerVerb[0], inf), infDistance);
+	
+	for(let pre of correctVerb.preterit.split("/"))
+		preDistance = Math.min(levenshteinDistance(playerVerb[1], pre), preDistance);
+	
+	for(let pp of correctVerb.past_participle.split("/"))
+		ppDistance = Math.min(levenshteinDistance(playerVerb[2], pp), ppDistance);
+	
+	return (1 - (infDistance + preDistance + ppDistance) / 3) >= lobbyThreshold ? 1 - (infDistance + preDistance + ppDistance) / 3 : 0;
 }
 
 export function getLobbies() {
@@ -273,9 +374,9 @@ export function getLobbies() {
 		lobbyJson["owner"] = lobby.owner;
 		lobbyJson["player_count"] = lobby.players.length;
 		lobbyJson["options"] = lobby.options;
-		//lobbyJson["words"] = lobby.words;
-		lobbyJson["current_word_index"] = lobby.current_word_index;
-		lobbyJson["players_submitted_word"] = lobby.players_submitted_word;
+		lobbyJson["questions"] = lobby.questions;
+		lobbyJson["current_question_index"] = lobby.current_question_index;
+		lobbyJson["players_submitted_answers"] = lobby.players_submitted_answers;
 		lobbyJson["status"] = lobby.status;
 		lobbiesJson.push(lobbyJson);
 	});
@@ -292,6 +393,9 @@ export function testOwnership(lobbyId, playerId) {
 }
 
 export function levenshteinDistance(a, b) {
+	if(a == undefined) a = "";
+	if(b == undefined) b = "";
+
 	if (a.length == 0) return b.length;
 	if (b.length == 0) return a.length;
 
@@ -325,10 +429,10 @@ cron.schedule("* * * * * *", () => {
 			let timerUpdate = { action: "timer-update", current_round_timer: lobby.current_round_timer };
 			lobby.players.forEach((player) => player.websocket.send(JSON.stringify(timerUpdate)));
 			if (lobby.current_round_timer >= lobby.options.round_timer) {
-				lobby.players.forEach((player) => 
-				{
-					if(player.entered_word == "")
-						receiveWord(lobbyId, player.id, "");
+				lobby.players.forEach((player) => {
+					if (player.entered_answer == "" || player.entered_answer == undefined)
+						//receiveAnswer(lobbyId, player.id, "");
+						receiveAnswer(lobbyId, player.id, "", lobby.questions[lobby.current_question_index].category);
 				});
 			}
 		}
@@ -341,12 +445,11 @@ cron.schedule("*/30 * * * * *", () => {
 	Object.keys(lobbies).forEach(function (lobbyId) {
 		var lobby = lobbies[lobbyId];
 		lobby.players.forEach((player) => {
-			if(player.websocket.readyState != 1)
+			if (player.websocket.readyState != 1)
 				leaveLobby(lobbyId, player.id);
-
 		});
 	});
 	let lobbiesCleaned = lobbiesBeforeCleanup - Object.keys(lobbies).length;
-	if(lobbiesCleaned > 0)
+	if (lobbiesCleaned > 0)
 		console.log("Cleaned up " + lobbiesCleaned + " lobbies.");
 });

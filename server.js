@@ -11,9 +11,9 @@ const serverPort = 5762;
 const wsServerPort = 5763;
 
 const credentials = {
-  key: privateKey,
-  cert: certificate,
-  passphrase: "feurestunstegosaure"
+	key: privateKey,
+	cert: certificate,
+	passphrase: "feurestunstegosaure"
 };
 
 import * as GameManager from "./GameManager.js";
@@ -92,13 +92,15 @@ wsApp.ws("/", function (ws, req) {
 					break;
 				}
 
-				case "send-word": {
-					GameManager.receiveWord(lobbyId, playerId, json.word);
+				case "send-answer":
+				{
+					//console.log("Received answer from player " + playerId + " in lobby " + lobbyId + ": " + json.answer, " (" + json.answer_type + ")");	
+					GameManager.receiveAnswer(lobbyId, playerId, json.answer, json.answer_type);
 					break;
 				}
 
-				case "request-next-word": {
-					GameManager.playerRequestedNextWord(lobbyId, playerId);
+				case "request-next-question": {
+					GameManager.playerRequestedNextQuestion(lobbyId, playerId);
 					break;
 				}
 			}
@@ -108,90 +110,91 @@ wsApp.ws("/", function (ws, req) {
 	});
 });
 
-app.get("/word-list", (req, res) => {
-	try
-	{
-		res.send({ action: "set-words", words: DatabaseConnection.getWords() });
+app.get("/words-list", (req, res) => {
+	try {
+		res.send({ action: "words-list", words: DatabaseConnection.getWords() });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error fetching words:", error);
 	}
 });
 
+app.get("/verbs-list", (req, res) => {
+	try {
+		res.send({ action: "verbs-list", verbs: DatabaseConnection.getVerbs() });
+	}
+	catch (error) {
+		console.error("Error fetching verbs:", error);
+	}
+});
+
 app.post("/add-word", jsonParser, (req, res) => {
-	try{
+	try {
 		DatabaseConnection.addWord(req.body.french, req.body.context, req.body.prefix, req.body.english);
 		res.send({ action: "word-added", word: { français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error adding word:", error);
 		res.send({ action: "add-word-failed" });
 	}
 });
 
 app.post("/change-word", jsonParser, (req, res) => {
-	try{
+	try {
 		DatabaseConnection.changeWord(req.body.id, req.body.french, req.body.context, req.body.prefix, req.body.english);
 		res.send({ action: "word-changed", word: { français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error changing word:", error);
 		res.send({ action: "change-word-failed" });
 	}
 });
 
 app.post("/remove-word", jsonParser, (req, res) => {
-	try{
+	try {
 		DatabaseConnection.removeWord(req.body.id);
 		res.send({ action: "word-removed", word: { id: req.body.id } });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error removing word:", error);
 		res.send({ action: "remove-word-failed" });
 	}
 });
 
 app.post("/register", jsonParser, async (req, res) => {
-	try{
+	try {
 		console.log(req);
 		var result = await UserManager.createUser(req.body.username, req.body.first_name, req.body.last_name, req.body.password_hash);
 		if (result.success) res.send({ action: "login-success", user_uuid: result.uuid });
 		else res.send({ action: "login-failed" });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error registering user:", error);
 		res.send({ action: "login-failed" });
 	}
 });
 
 app.post("/login", jsonParser, async (req, res) => {
-	try{
+	try {
 		var result = await UserManager.login(req.body.username, req.body.password_hash);
 		if (result.success) res.send({ action: "login-success", user_uuid: result.uuid });
 		else res.send({ action: "login-failed" });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error logging in user:", error);
 		res.send({ action: "login-failed" });
 	}
 });
 
 app.get("/users", jsonParser, async (req, res) => {
-	try{
+	try {
 		var userIds = req.body.user_ids;
 		var result = await UserManager.getUsersInfo(userIds);
 		if (result.success) res.send({ action: "users-info", users_info: result.users_info });
 		else
 			res.send({ action: "users-info-failed" });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error fetching users info:", error);
 		res.send({ action: "users-info-failed" });
 	}
@@ -199,13 +202,12 @@ app.get("/users", jsonParser, async (req, res) => {
 
 // SERVER-ADDRESS/user/<user_id>
 app.get("/user/:user_id", async (req, res) => {
-	try{
+	try {
 		var result = await UserManager.getUserInfo(req.params.user_id);
 		if (result.success) res.send({ action: "user-info", user_info: result.user_info });
 		else res.send({ action: "user-info-failed" });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error fetching user info:", error);
 		res.send({ action: "user-info-failed" });
 	}
@@ -213,11 +215,10 @@ app.get("/user/:user_id", async (req, res) => {
 
 app.get("/lobbies", (req, res) => {
 	//console.log(lobbies);
-	try{
+	try {
 		res.send({ action: "set-lobbies", lobbies: GameManager.getLobbies() });
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error fetching lobbies:", error);
 		res.send({ action: "set-lobbies", lobbies: [] });
 	}
@@ -225,14 +226,13 @@ app.get("/lobbies", (req, res) => {
 
 // SERVER/owner/<lobby_id>?player_id=<player_id>
 app.get("/owner/:lobby_id", jsonParser, (req, res) => {
-	try{
+	try {
 		res.send({
 			action: "test-ownership",
 			result: GameManager.testOwnership(req.params.lobby_id, req.query.player_id),
 		});
 	}
-	catch(error)
-	{
+	catch (error) {
 		console.error("Error testing lobby ownership:", error);
 		res.send({ action: "test-ownership", result: false });
 	}

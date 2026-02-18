@@ -8,6 +8,7 @@ let con = mysql.createConnection({
 });
 
 var cachedWords = [];
+var cachedVerbs = [];
 
 export function getWords() {
 	con.connect(function (err) {
@@ -19,6 +20,18 @@ export function getWords() {
 		})();
 	});
 	return cachedWords;
+}
+
+export function getVerbs() {
+	con.connect(function (err) {
+		if (err) throw err;
+		!(async function () {
+			var query = "SELECT * FROM `verbs`";
+			var [rows, fields] = await con.promise().query(query);
+			cachedVerbs = rows;
+		})();
+	});
+	return cachedVerbs;
 }
 
 export function addWord(french, context, prefix, english) {
@@ -42,8 +55,8 @@ export function changeWord(id, french, context, prefix, english) {
 			var affectedRows = result[0].affectedRows;
 			console.log(affectedRows + " record(s) updated");
 		}
-	)();
-});
+		)();
+	});
 }
 
 export function removeWord(id) {
