@@ -152,6 +152,27 @@ export function startLobby(lobbyId, playerId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby != undefined && lobby.owner == playerId) {
 
+		lobby.players.filter((p) => p.is_spectating).forEach((player) => 
+		{
+			player.is_spectating = true
+			player.websocket.send(JSON.stringify({ action: "spectate" }));
+		});
+
+		let updatedScores = [];
+
+		lobby.players.forEach((player) => {
+			updatedScores.push({
+				player_id: player.id,
+				new_score: player.score,
+			});
+		});
+
+		let updateScores = {
+			action: "update-scores",
+			scores: updatedScores,
+		};
+		lobby.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
+
 		let randomizedWords = Utils.shuffle(DatabaseConnection.getWords());
 		let randomizedVerbs = Utils.shuffle(DatabaseConnection.getVerbs());
 		let randomizedCountries = Utils.shuffle(DatabaseConnection.getCountries());
@@ -321,8 +342,10 @@ export function receiveAnswer(lobbyId, playerId, answer, answerType) {
 
 	player.entered_answer = answer;
 	lobby.players_submitted_answers++;
+	
+	let players_amount = lobby.players.filter((p) => p.is_spectating == false).length;
 
-	if (lobby.players_submitted_answers >= lobby.players.length) {
+	if (lobby.players_submitted_answers >= players_amount) {
 		updateScores(lobbyId);
 		lobby.status = "waiting-for-next-question";
 	}
@@ -335,6 +358,8 @@ export function updateScores(lobbyId) {
 	let updatedScores = [];
 	let currentQuestion = lobby.questions[lobby.current_question_index];
 	lobby.players.forEach((player) => {
+		if(player.is_spectating) return;
+
 		let wordSimilarity = checkAnswer(player.entered_answer, currentQuestion.question, currentQuestion.category, lobby.options.similarity_threshold);
 		player.entered_answer = "";
 		player.score += wordSimilarity;
@@ -350,8 +375,7 @@ export function updateScores(lobbyId) {
 		{
 			if(wordSimilarity == 0)
 			{
-				let elimination = { action: "elimination" };
-				player.websocket.send(JSON.stringify(elimination));
+				player.websocket.send(JSON.stringify({ action: "spectate" }));
 				player.is_spectating = true;
 
 				let playerEliminated = { action: "player-eliminated", player_id: player.id };
@@ -389,7 +413,7 @@ export function playerRequestedNextQuestion(lobbyId, playerId) {
 	player.ready_for_next_answer = true;
 
 	let allReady = true;
-	lobby.players.forEach((player) => {
+	lobby.players.filter((p) => !p.is_spectating).forEach((player) => {
 		if (!player.ready_for_next_answer) allReady = false;
 	});
 
@@ -403,6 +427,22 @@ export function playerRequestedNextQuestion(lobbyId, playerId) {
 		}
 		nextQuestion(lobbyId);
 	};
+}
+
+export function continueGame(lobbyId)
+{
+	let lobby = lobbies[lobbyId];
+	if (lobby == undefined) return;
+	lobby.current_question_index = -1;
+	lobby.status = "waiting";
+
+	lobby.players.forEach((player) => {
+		player.score = 0;
+		player.entered_answer = "";
+		player.ready_for_next_answer = false;
+		player.is_spectating = false;
+	});
+
 }
 
 export function checkAnswer(playerAnswer, correctAnswer, answerType, lobbyThreshold = 0.80) {

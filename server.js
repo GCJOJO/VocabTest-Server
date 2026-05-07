@@ -108,6 +108,12 @@ wsApp.ws("/", function (ws, req) {
 					GameManager.playerRequestedNextQuestion(lobbyId, playerId);
 					break;
 				}
+
+				case "continue-game":
+				{
+					GameManager.continueGame(lobbyId);	
+					break;
+				}
 			}
 		} catch (error) {
 			console.error("Error handling WebSocket message:", error);
@@ -186,7 +192,6 @@ app.post("/remove-word", jsonParser, (req, res) => {
 
 app.post("/register", jsonParser, async (req, res) => {
 	try {
-		console.log(req);
 		var result = await UserManager.createUser(req.body.username, req.body.first_name, req.body.last_name, req.body.password_hash);
 		if (result.success) res.send({ action: "login-success", user_uuid: result.uuid });
 		else res.send({ action: "login-failed" });
