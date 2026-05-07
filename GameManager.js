@@ -35,7 +35,7 @@ export function createLobby(playerId, ownerWebsocket) {
 			"categories": DEFAULT_CATEGORIES,		//  1000 : country, 0100 : grammar, 0010 : verbs, 0001 : vocabulary
 			"round_timer": 30, 						// timer in seconds, -1 : no timer
 			"similarity_threshold": 0.8,			// 0 to 1, how similar the words must be to be considered correct,
-			"lobby_mode" : LobbyMode.BATTLE_ROYALE,					
+			"lobby_mode" : LobbyMode.CLASSIC,					
 		},
 	};
 
