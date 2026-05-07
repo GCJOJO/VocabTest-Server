@@ -13,6 +13,11 @@ const GRAMMAR_CATEGORY 	= 1 << 3;
 
 const DEFAULT_CATEGORIES = WORD_CATEGORY | VERB_CATEGORY | COUNTRY_CATEGORY | GRAMMAR_CATEGORY;
 
+const LobbyMode = {
+	CLASSIC: 0,
+	BATTLE_ROYALE: 1
+};
+
 export function createLobby(playerId, ownerWebsocket) {
 	let lobbyId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
@@ -26,14 +31,13 @@ export function createLobby(playerId, ownerWebsocket) {
 		status: "waiting",
 		options:
 		{
-			"max_words": 10, 					// -1 means ALL OF THEM
-			"categories": DEFAULT_CATEGORIES,	//  1000 : country, 0100 : grammar, 0010 : verbs, 0001 : vocabulary
-			"round_timer": 30, 					// timer in seconds, -1 : no timer
-			"similarity_threshold": 0.8			// 0 to 1, how similar the words must be to be considered correct
+			"max_words": 10, 						// -1 means ALL OF THEM
+			"categories": DEFAULT_CATEGORIES,		//  1000 : country, 0100 : grammar, 0010 : verbs, 0001 : vocabulary
+			"round_timer": 30, 						// timer in seconds, -1 : no timer
+			"similarity_threshold": 0.8,			// 0 to 1, how similar the words must be to be considered correct,
+			"lobby_mode" : LobbyMode.BATTLE_ROYALE,					
 		},
 	};
-
-	joinLobby(lobbyId, playerId, ownerWebsocket);
 
 	return lobbyId;
 }
@@ -76,6 +80,8 @@ export function joinLobby(lobbyId, playerId, playerWebsocket) {
 			id: playerId,
 			entered_word: "",
 			ready_for_next_word: false,
+			is_spectator: false,    		// For players who chose to spectate the game from the beginning
+			is_spectating: false, 			// For players who were eliminated and are now spectating the game
 			score: 0,
 			websocket: playerWebsocket,
 		});
@@ -242,6 +248,21 @@ export function startLobby(lobbyId, playerId) {
 	}
 }
 
+export function setIsSpectator(lobbyId, playerId, isSpectator) 
+{
+	let lobby = lobbies[lobbyId];
+	if (lobby == undefined) return;
+
+	let player = lobby.players.find(p => p.id === playerId);
+	if (player == undefined) return;
+
+	player.is_spectator = isSpectator;
+	player.is_spectating = isSpectator;
+
+	let response = { action: "spectator-status-updated", player_id: playerId, is_spectator: isSpectator };
+	lobby.players.forEach((p) => p.websocket.send(JSON.stringify(response)));
+}
+
 export function sendQuestion(lobbyId, question) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
@@ -260,8 +281,9 @@ export function nextQuestion(lobbyId) {
 	lobby.players.forEach((player) => (player.ready_for_next_answer = false));
 	lobby.current_question_index += 1;
 	if (lobby.current_question_index >= lobby.questions.length) {
+		let winnerId = lobby.players.reduce((maxPlayer, player) => player.score > maxPlayer.score ? player : maxPlayer, lobby.players[0]).id;
 		lobby.status = "ended";
-		let endGame = { action: "end-game" };
+		let endGame = { action: "end-game", winner_id: winnerId };
 		lobby.players.forEach((player) => player.websocket.send(JSON.stringify(endGame)));
 		return;
 	}
@@ -275,7 +297,6 @@ export function nextQuestion(lobbyId) {
 	sendQuestion(lobbyId, current_question);
 }
 
-
 export function receiveAnswer(lobbyId, playerId, answer, answerType) {
 	let lobby = lobbies[lobbyId];
 	if (lobby == undefined) return;
@@ -287,8 +308,16 @@ export function receiveAnswer(lobbyId, playerId, answer, answerType) {
 	let player = lobby.players.find(p => p.id === playerId);
 	if (player == undefined) return;
 
+	if(player.is_spectating) return;
+
 	let response = { action: "answer-received", answer: answer };
 	player.websocket.send(JSON.stringify(response));
+
+	lobby.players.filter((p) => p.is_spectating == true).forEach((spectator) => 
+	{
+		let playerAnswered = { action: "player-answered", player_id: playerId };
+		spectator.websocket.send(JSON.stringify(playerAnswered));
+	});
 
 	player.entered_answer = answer;
 	lobby.players_submitted_answers++;
@@ -309,13 +338,36 @@ export function updateScores(lobbyId) {
 		let wordSimilarity = checkAnswer(player.entered_answer, currentQuestion.question, currentQuestion.category, lobby.options.similarity_threshold);
 		player.entered_answer = "";
 		player.score += wordSimilarity;
+
 		updatedScores.push({
 			player_id: player.id,
 			new_score: player.score,
 		});
 		let showResults = { action: "show-results", word_similarity: wordSimilarity, similarity_threshold: lobby.options.similarity_threshold };
 		player.websocket.send(JSON.stringify(showResults));
+
+		if(lobby.options.lobby_mode == LobbyMode.BATTLE_ROYALE)
+		{
+			if(wordSimilarity == 0)
+			{
+				let elimination = { action: "elimination" };
+				player.websocket.send(JSON.stringify(elimination));
+				player.is_spectating = true;
+
+				let playerEliminated = { action: "player-eliminated", player_id: player.id };
+				lobby.players.filter((p) => p.id != player.id).forEach((p) => p.websocket.send(JSON.stringify(playerEliminated)));
+
+				let remainingPlayers = lobby.players.filter((p) => p.is_spectating == false);
+				if(remainingPlayers.length == 1)
+				{
+					lobby.status = "ended";
+					let winner = { action: "end-game", winner_id: remainingPlayers[0].id };
+					lobby.players.forEach((p) => p.websocket.send(JSON.stringify(winner)));
+				}
+			}
+		}
 	});
+
 	lobby.players_submitted_answers = 0;
 
 	let updateScores = {
@@ -343,7 +395,9 @@ export function playerRequestedNextQuestion(lobbyId, playerId) {
 
 	if (allReady) {
 		if (lobby.current_question_index >= lobby.options.max_words - 1) {
-			let endGame = { action: "end-game" };
+			let winnerId = lobby.players.reduce((maxPlayer, player) => player.score > maxPlayer.score ? player : maxPlayer, lobby.players[0]).id;
+			lobby.status = "ended";
+			let endGame = { action: "end-game", winner_id: winnerId };
 			lobby.players.forEach((player) => player.websocket.send(JSON.stringify(endGame)));
 			return;
 		}
@@ -410,6 +464,7 @@ export function getLobbies() {
 		lobbyJson["current_question_index"] = lobby.current_question_index;
 		lobbyJson["players_submitted_answers"] = lobby.players_submitted_answers;
 		lobbyJson["status"] = lobby.status;
+		lobbyJson["lobby_mode"] = lobby.options.lobby_mode;
 		lobbiesJson.push(lobbyJson);
 	});
 

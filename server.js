@@ -87,6 +87,11 @@ wsApp.ws("/", function (ws, req) {
 					break;
 				}
 
+				case "set-is-spectator": {
+					GameManager.setIsSpectator(lobbyId, playerId, json.is_spectator);
+					break;
+				}
+
 				case "start-lobby": {
 					GameManager.startLobby(lobbyId, playerId);
 					break;
