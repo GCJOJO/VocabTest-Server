@@ -1,14 +1,17 @@
-import * as Utils from "./Utils.js";
-import * as UserManager from "./UserManager.js";
-import * as DatabaseConnection from "./DatabaseConnection.js";
 import cron from "node-cron";
+import * as DatabaseConnection from "./DatabaseConnection.js";
+import * as Utils from "./Utils.js";
 
 var lobbies = [];
 
 const MAX_PLAYERS_PER_LOBBY = 10;
 
-const WORD_CATEGORY = 1 << 0;
-const VERB_CATEGORY = 1 << 1;
+const WORD_CATEGORY 	= 1 << 0;
+const VERB_CATEGORY 	= 1 << 1;
+const COUNTRY_CATEGORY 	= 1 << 2;
+const GRAMMAR_CATEGORY 	= 1 << 3;
+
+const DEFAULT_CATEGORIES = WORD_CATEGORY | VERB_CATEGORY | COUNTRY_CATEGORY | GRAMMAR_CATEGORY;
 
 export function createLobby(playerId, ownerWebsocket) {
 	let lobbyId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -23,10 +26,10 @@ export function createLobby(playerId, ownerWebsocket) {
 		status: "waiting",
 		options:
 		{
-			"max_words": 10,								// -1 means ALL OF THEM
-			"categories": WORD_CATEGORY | VERB_CATEGORY,	//  1000 : pays, 0100 : adverbes, 0010 : verbes, 0001 : vocabulaire
-			"round_timer": 30, 								// timer in seconds, -1 : no timer
-			"similarity_threshold": 0.8						// 0 to 1, how similar the words must be to be considered correct (not implemented yet)
+			"max_words": 10, 					// -1 means ALL OF THEM
+			"categories": DEFAULT_CATEGORIES,	//  1000 : country, 0100 : grammar, 0010 : verbs, 0001 : vocabulary
+			"round_timer": 30, 					// timer in seconds, -1 : no timer
+			"similarity_threshold": 0.8			// 0 to 1, how similar the words must be to be considered correct
 		},
 	};
 
@@ -145,6 +148,8 @@ export function startLobby(lobbyId, playerId) {
 
 		let randomizedWords = Utils.shuffle(DatabaseConnection.getWords());
 		let randomizedVerbs = Utils.shuffle(DatabaseConnection.getVerbs());
+		let randomizedCountries = Utils.shuffle(DatabaseConnection.getCountries());
+		let randomizedGrammar = Utils.shuffle(DatabaseConnection.getGrammar());
 
 		let questionCategoryAmounts = {};
 		let questionCategoryMaxAmounts = {};
@@ -155,7 +160,7 @@ export function startLobby(lobbyId, playerId) {
 		if(lobby.options.categories == 0)
 		{
 			//console.log("No category selected, adding all categories to the lobby questions pool");
-			lobby.options.categories = WORD_CATEGORY | VERB_CATEGORY;
+			lobby.options.categories = DEFAULT_CATEGORIES;
 		}
 
 		let availableQuestions = 0;
@@ -172,6 +177,20 @@ export function startLobby(lobbyId, playerId) {
 			questionCategoryAmounts[VERB_CATEGORY] = 0;
 			questionCategoryMaxAmounts[VERB_CATEGORY] = randomizedVerbs.length;
 			availableQuestions += randomizedVerbs.length;
+		}
+		if ((lobby.options.categories & COUNTRY_CATEGORY) != 0) {
+			//console.log("Adding countries to the lobby questions pool");
+			questionCategories.push(COUNTRY_CATEGORY);
+			questionCategoryAmounts[COUNTRY_CATEGORY] = 0;
+			questionCategoryMaxAmounts[COUNTRY_CATEGORY] = randomizedCountries.length;
+			availableQuestions += randomizedCountries.length;
+		}
+		if ((lobby.options.categories & GRAMMAR_CATEGORY) != 0) {
+			//console.log("Adding grammar to the lobby questions pool");
+			questionCategories.push(GRAMMAR_CATEGORY);
+			questionCategoryAmounts[GRAMMAR_CATEGORY] = 0;
+			questionCategoryMaxAmounts[GRAMMAR_CATEGORY] = randomizedGrammar.length;
+			availableQuestions += randomizedGrammar.length;
 		}
 
 		let maxQuestionAmount = Math.min(lobby.options.max_words, availableQuestions);
@@ -193,6 +212,16 @@ export function startLobby(lobbyId, playerId) {
 						if (questionCategoryAmounts[VERB_CATEGORY] >= questionCategoryMaxAmounts[VERB_CATEGORY]) continue;
 						question = randomizedVerbs[questionCategoryAmounts[VERB_CATEGORY]];
 						questionCategoryAmounts[VERB_CATEGORY]++;
+						break;
+					case COUNTRY_CATEGORY:
+						if (questionCategoryAmounts[COUNTRY_CATEGORY] >= questionCategoryMaxAmounts[COUNTRY_CATEGORY]) continue;
+						question = randomizedCountries[questionCategoryAmounts[COUNTRY_CATEGORY]];
+						questionCategoryAmounts[COUNTRY_CATEGORY]++;
+						break;
+					case GRAMMAR_CATEGORY:
+						if (questionCategoryAmounts[GRAMMAR_CATEGORY] >= questionCategoryMaxAmounts[GRAMMAR_CATEGORY]) continue;
+						question = randomizedGrammar[questionCategoryAmounts[GRAMMAR_CATEGORY]];
+						questionCategoryAmounts[GRAMMAR_CATEGORY]++;
 						break;
 				}
 			}
@@ -326,6 +355,9 @@ export function checkAnswer(playerAnswer, correctAnswer, answerType, lobbyThresh
 	switch (answerType) {
 		case WORD_CATEGORY:
 			return checkWord(playerAnswer, correctAnswer.anglais, lobbyThreshold);
+		case COUNTRY_CATEGORY:
+		case GRAMMAR_CATEGORY:
+			return checkWord(playerAnswer, correctAnswer.english, lobbyThreshold);
 		case VERB_CATEGORY:
 			return checkVerb(playerAnswer, correctAnswer, lobbyThreshold);
 		default:

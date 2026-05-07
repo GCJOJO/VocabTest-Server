@@ -9,6 +9,8 @@ let con = mysql.createConnection({
 
 var cachedWords = [];
 var cachedVerbs = [];
+var cachedCountries = [];
+var cachedGrammar = [];
 
 export function getWords() {
 	con.connect(function (err) {
@@ -32,6 +34,30 @@ export function getVerbs() {
 		})();
 	});
 	return cachedVerbs;
+}
+
+export function getCountries() {
+	con.connect(function (err) {
+		if (err) throw err;
+		!(async function () {
+			var query = "SELECT * FROM `country`";
+			var [rows, fields] = await con.promise().query(query);
+			cachedCountries = rows;
+		})();
+	});
+	return cachedCountries;
+}
+
+export function getGrammar() {
+	con.connect(function (err) {
+		if (err) throw err;
+		!(async function () {
+			var query = "SELECT * FROM `grammar`";
+			var [rows, fields] = await con.promise().query(query);
+			cachedGrammar = rows;
+		})();
+	});
+	return cachedGrammar;
 }
 
 export function addWord(french, context, prefix, english) {

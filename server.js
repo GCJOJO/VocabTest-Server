@@ -128,6 +128,24 @@ app.get("/verbs-list", (req, res) => {
 	}
 });
 
+app.get("/countries-list", (req, res) => {
+	try {
+		res.send({ action: "countries-list", countries: DatabaseConnection.getCountries() });
+	}
+	catch (error) {
+		console.error("Error fetching countries:", error);
+	}
+});
+
+app.get("/grammar-list", (req, res) => {
+	try {
+		res.send({ action: "grammar-list", grammar: DatabaseConnection.getGrammar() });
+	}
+	catch (error) {
+		console.error("Error fetching grammar:", error);
+	}
+});
+
 app.post("/add-word", jsonParser, (req, res) => {
 	try {
 		DatabaseConnection.addWord(req.body.french, req.body.context, req.body.prefix, req.body.english);
@@ -250,3 +268,6 @@ wsHttpsServer.listen(wsServerPort, () => {
 console.log("Server running !");
 
 DatabaseConnection.getWords();
+DatabaseConnection.getVerbs();
+DatabaseConnection.getCountries();
+DatabaseConnection.getGrammar();
