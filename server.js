@@ -16,6 +16,8 @@ const credentials = {
 	passphrase: "feurestunstegosaure"
 };
 
+const GAME_VERSION = "0.0.8";
+
 import * as GameManager from "./GameManager.js";
 import * as DatabaseConnection from "./DatabaseConnection.js";
 import * as UserManager from "./UserManager.js";
@@ -114,11 +116,21 @@ wsApp.ws("/", function (ws, req) {
 					GameManager.continueGame(lobbyId);	
 					break;
 				}
+
+				case "update-is-spectator": {
+					console.log("Player " + playerId + " in lobby " + lobbyId + " is now " + (json.is_spectator ? "a spectator" : "a player"));
+					GameManager.setIsSpectator(lobbyId, playerId, json.is_spectator);
+					break;
+				}
 			}
 		} catch (error) {
 			console.error("Error handling WebSocket message:", error);
 		}
 	});
+});
+
+app.get("/version", (req, res) => {
+	res.send({ version: GAME_VERSION });
 });
 
 app.get("/words-list", (req, res) => {

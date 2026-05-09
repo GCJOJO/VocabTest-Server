@@ -151,13 +151,6 @@ export function disbandLobby(lobbyId) {
 export function startLobby(lobbyId, playerId) {
 	let lobby = lobbies[lobbyId];
 	if (lobby != undefined && lobby.owner == playerId) {
-
-		lobby.players.filter((p) => p.is_spectating).forEach((player) => 
-		{
-			player.is_spectating = true
-			player.websocket.send(JSON.stringify({ action: "spectate" }));
-		});
-
 		let updatedScores = [];
 
 		lobby.players.forEach((player) => {
@@ -266,6 +259,15 @@ export function startLobby(lobbyId, playerId) {
 		lobby.current_question_index = 0;
 		let current_question = lobby.questions[lobby.current_question_index];
 		sendQuestion(lobbyId, current_question);
+
+		lobby.players.filter((p) => p.is_spectator).forEach((player) => 
+		{
+			player.is_spectating = true
+			player.websocket.send(JSON.stringify({ action: "spectate" }));
+
+			let playerEliminated = { action: "player-eliminated", player_id: player.id };
+			lobby.players.filter((p) => p.id != player.id).forEach((p) => p.websocket.send(JSON.stringify(playerEliminated)));
+		});
 	}
 }
 
