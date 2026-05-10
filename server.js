@@ -16,7 +16,7 @@ const credentials = {
 	passphrase: "feurestunstegosaure"
 };
 
-const GAME_VERSION = "0.0.8";
+const GAME_VERSION = "0.0.9";
 
 import * as GameManager from "./GameManager.js";
 import * as DatabaseConnection from "./DatabaseConnection.js";
@@ -118,7 +118,7 @@ wsApp.ws("/", function (ws, req) {
 				}
 
 				case "update-is-spectator": {
-					console.log("Player " + playerId + " in lobby " + lobbyId + " is now " + (json.is_spectator ? "a spectator" : "a player"));
+					//console.log("Player " + playerId + " in lobby " + lobbyId + " is now " + (json.is_spectator ? "a spectator" : "a player"));
 					GameManager.setIsSpectator(lobbyId, playerId, json.is_spectator);
 					break;
 				}
@@ -237,6 +237,32 @@ app.get("/users", jsonParser, async (req, res) => {
 	catch (error) {
 		console.error("Error fetching users info:", error);
 		res.send({ action: "users-info-failed" });
+	}
+});
+
+app.post("/update-score", jsonParser, async (req, res) => {
+	try 
+	{
+		//console.log("Updating score for user " + req.body.player_id + " to " + req.body.new_score);
+		var result = await UserManager.updateUserScore(req.body.player_id, req.body.new_score);
+		if (result.success) res.send({ action: "score-updated", player_id: req.body.player_id, new_score: result.new_score });
+		else res.send({ action: "score-update-failed" });
+	}
+	catch (error) {
+		console.error("Error updating user score:", error);
+		res.send({ action: "score-update-failed" });
+	}
+});
+
+app.get("/leaderboard", async (req, res) => {
+	try {
+		var result = await DatabaseConnection.getLeaderboard();
+		if (result.success) res.send({ action: "leaderboard", leaderboard: result.leaderboard });
+		else res.send({ action: "leaderboard-failed" });
+	}
+	catch (error) {
+		console.error("Error fetching leaderboard:", error);
+		res.send({ action: "leaderboard-failed" });
 	}
 });
 

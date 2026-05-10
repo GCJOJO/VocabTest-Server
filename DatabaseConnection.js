@@ -182,3 +182,81 @@ export async function getUsersInfo(user_ids) {
 		});
 	});
 }
+
+export function getUserScore(user_id) {
+	return new Promise((resolve, reject) => {
+		con.connect(function (err) {
+			if (err) {
+				return reject(err);
+			}
+			(async function () {
+				try {
+					var query = "SELECT `score` FROM `users` WHERE `uuid` = ?";
+					var [rows, fields] = await con.promise().query(query, [user_id]);
+					if (rows.length > 0) {
+						resolve({ success: true, score: rows[0].score });
+					} else {
+						resolve({ success: false });
+					}
+				} catch (e) {
+					reject(e);
+				}
+			})();
+		});
+	});
+}
+
+export async function updateUserScore(user_id, score) {
+	return new Promise((resolve, reject) => {
+		con.connect(function (err) {
+			if (err) {
+				return reject(err);
+			}
+			(async function () {
+				try {
+					var current_score = await getUserScore(user_id);
+					if (!current_score.success) {
+						return resolve({ success: false });
+					}
+
+					if (score <= current_score.score) {
+						return resolve({ success: false, new_score: current_score.score });
+					}
+
+					var query = "UPDATE `users` SET `score` = ? WHERE `uuid` = ?";
+					var result = await con.promise().query(query, [score, user_id]);
+					var affectedRows = result[0].affectedRows;
+					console.log(affectedRows + " record(s) updated");
+					if (affectedRows >= 1) {
+						resolve({ success: true, new_score: score });
+					}
+					else {
+						resolve({ success: false });
+					}
+				} catch (e) {
+					reject(e);
+				}
+			})();
+		});
+	});
+}
+
+export async function getLeaderboard() {
+	return new Promise((resolve, reject) => {
+		con.connect(function (err) {
+			if (err) {
+				return reject(err);
+			}
+			(async function () {
+				try {
+					var query = "SELECT `uuid`, `username`, `score` FROM `users` ORDER BY `score` DESC";
+					var [rows, fields] = await con.promise().query(query);
+					resolve({ success: true, leaderboard: rows.filter((row) => row != null && row.score > 0) });
+				}
+				catch (e) {
+					reject(e);
+				}
+			})();
+		});
+	});
+}

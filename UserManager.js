@@ -36,3 +36,11 @@ export async function getUsersInfo(user_ids)
         return { success: true, users_info: result.users_info };
     return { success: false };
 }
+
+export async function updateUserScore(user_id, score)
+{
+    let result = await DatabaseConnection.updateUserScore(user_id, score);
+    if(result.success)
+        return { success: true, new_score: result.new_score };
+    return { success: false };
+}
