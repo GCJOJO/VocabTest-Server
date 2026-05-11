@@ -379,7 +379,7 @@ export function updateScores(lobbyId) {
 
 		if(lobby.options.lobby_mode == LobbyMode.BATTLE_ROYALE)
 		{
-			console.log("Player" + player.id + " got a score of " + wordSimilarity + " for the question " + JSON.stringify(currentQuestion.question));
+			//console.log("Player" + player.id + " got a score of " + wordSimilarity + " for the question " + JSON.stringify(currentQuestion.question));
 			if(wordSimilarity != 1)
 			{
 				player.websocket.send(JSON.stringify({ action: "spectate" }));
