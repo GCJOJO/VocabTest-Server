@@ -164,6 +164,7 @@ export function startLobby(lobbyId, playerId) {
 			action: "update-scores",
 			scores: updatedScores,
 		};
+
 		lobby.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
 
 		let randomizedWords = Utils.shuffle(DatabaseConnection.getWords());
@@ -216,6 +217,8 @@ export function startLobby(lobbyId, playerId) {
 		let maxQuestionAmount = Math.min(lobby.options.max_words, availableQuestions);
 		lobby.options.max_words = maxQuestionAmount;
 
+		lobby.questions = [];
+
 		for (let i = 0; i < maxQuestionAmount; i++) {
 			let question = null;
 			let randomCategory = -1;
@@ -257,6 +260,7 @@ export function startLobby(lobbyId, playerId) {
 		lobby.players.forEach((player) => player.websocket.send(JSON.stringify(response)));
 
 		lobby.current_question_index = 0;
+		lobby.current_round_timer = 0;
 		let current_question = lobby.questions[lobby.current_question_index];
 		sendQuestion(lobbyId, current_question);
 
@@ -375,7 +379,8 @@ export function updateScores(lobbyId) {
 
 		if(lobby.options.lobby_mode == LobbyMode.BATTLE_ROYALE)
 		{
-			if(wordSimilarity == 0)
+			console.log("Player" + player.id + " got a score of " + wordSimilarity + " for the question " + JSON.stringify(currentQuestion.question));
+			if(wordSimilarity != 1)
 			{
 				player.websocket.send(JSON.stringify({ action: "spectate" }));
 				player.is_spectating = true;
@@ -385,17 +390,10 @@ export function updateScores(lobbyId) {
 
 				let remainingPlayers = lobby.players.filter((p) => p.is_spectating == false);
 
-				if(remainingPlayers.length == 1)
+				if(remainingPlayers.length <= 1)
 				{
 					lobby.status = "ended";
-					let winner = { action: "end-game", winner_id: remainingPlayers[0].id };
-					lobby.players.forEach((p) => p.websocket.send(JSON.stringify(winner)));
-				}
-
-				if(remainingPlayers.length == 0)
-				{
-					lobby.status = "ended";
-					let winner = { action: "end-game", winner_id: null };
+					let winner = { action: "end-game", winner_id: remainingPlayers.length == 1 ? remainingPlayers[0].id : null};
 					lobby.players.forEach((p) => p.websocket.send(JSON.stringify(winner)));
 				}
 			}
@@ -447,12 +445,11 @@ export function continueGame(lobbyId)
 	lobby.status = "waiting";
 
 	lobby.players.forEach((player) => {
-		player.score = 0;
+		//player.score = 0;
 		player.entered_answer = "";
 		player.ready_for_next_answer = false;
 		player.is_spectating = false;
 	});
-
 }
 
 export function checkAnswer(playerAnswer, correctAnswer, answerType, lobbyThreshold = 0.80) {

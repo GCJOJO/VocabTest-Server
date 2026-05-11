@@ -16,7 +16,7 @@ const credentials = {
 	passphrase: "feurestunstegosaure"
 };
 
-const GAME_VERSION = "0.0.9b";
+const GAME_VERSION = "0.0.10";
 
 import * as GameManager from "./GameManager.js";
 import * as DatabaseConnection from "./DatabaseConnection.js";
