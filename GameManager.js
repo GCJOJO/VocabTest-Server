@@ -384,10 +384,18 @@ export function updateScores(lobbyId) {
 				lobby.players.filter((p) => p.id != player.id).forEach((p) => p.websocket.send(JSON.stringify(playerEliminated)));
 
 				let remainingPlayers = lobby.players.filter((p) => p.is_spectating == false);
+
 				if(remainingPlayers.length == 1)
 				{
 					lobby.status = "ended";
 					let winner = { action: "end-game", winner_id: remainingPlayers[0].id };
+					lobby.players.forEach((p) => p.websocket.send(JSON.stringify(winner)));
+				}
+
+				if(remainingPlayers.length == 0)
+				{
+					lobby.status = "ended";
+					let winner = { action: "end-game", winner_id: null };
 					lobby.players.forEach((p) => p.websocket.send(JSON.stringify(winner)));
 				}
 			}
