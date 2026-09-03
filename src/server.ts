@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import bodyParser from "body-parser";
 import cors from "cors";
 import fs from "fs";
+import http from "http";
 import https from "https";
 
 import { GameManager } from "./GameManager.js";
@@ -11,14 +12,14 @@ import { UserManager } from "./UserManager.js";
 import { SocketServer } from "./SocketServer.js";
 import { Constants } from "./Constants.js";
 
-var privateKey  = fs.readFileSync('server.key', 'utf8');
-var certificate = fs.readFileSync('server.crt', 'utf8');
+//var privateKey  = fs.readFileSync('server.key', 'utf8');
+//var certificate = fs.readFileSync('server.crt', 'utf8');
 
-const credentials = {
+/*const credentials = {
 	key: privateKey,
 	cert: certificate,
 	passphrase: "feurestunstegosaure"
-};
+};*/
 
 const GAME_VERSION = "0.0.11";
 
@@ -32,7 +33,8 @@ const app : express.Application = express();
 app.use(cors(corsOption));
 app.use(express.static("public"));
 //app.set("port", process.env.PORT || 5762);
-var httpsServer = https.createServer(credentials, app);
+//var httpsServer = https.createServer(credentials, app);
+var httpServer = http.createServer(app);
 
 // create application/json parser
 var jsonParser = bodyParser.json();
@@ -120,7 +122,7 @@ function handleWebSocketMessage(ws : WebSocket, msg : string)
 
 const socketApp = express();
 socketApp.use(cors(corsOption));
-var socketServer = https.createServer(credentials, socketApp);
+var socketServer = http.createServer(socketApp);
 
 socketServer.listen(Constants.SOCKET_PORT, () => {
 	console.log(`WebSocket Server running on port ${Constants.SOCKET_PORT}`);
@@ -129,6 +131,7 @@ socketServer.listen(Constants.SOCKET_PORT, () => {
 const SocketServerInstance = new SocketServer(socketServer, handleWebSocketMessage);
 
 app.get("/version", (req : any, res : any) => {
+	console.log('Got /version request');
 	res.send({ version: GAME_VERSION });
 });
 
@@ -320,8 +323,8 @@ app.get("/owner/:lobby_id", jsonParser, async (req : any, res : any) => {
 });
 
 //app.listen(app.get("port"));
-httpsServer.listen(Constants.SERVER_PORT, () => {
-	console.log(`HTTPS Server running on port ${Constants.SERVER_PORT}`);
+httpServer.listen(Constants.SERVER_PORT, () => {
+	console.log(`HTTP Server running on port ${Constants.SERVER_PORT}`);
 });
 
 console.log("Server running !");
