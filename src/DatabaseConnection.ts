@@ -163,6 +163,20 @@ export class DatabaseConnection {
 		});
 	}
 
+	public static AddCountry(french : string, english : string) {
+		this.DoIfConnected(async (connection) => {
+			try {
+				var query = "INSERT INTO `country` (`french`, `english`) VALUES (?, ?)";
+				var result = await connection.promise().query<ResultSetHeader>(query, [french, english]);
+				var affectedRows = result[0].affectedRows;
+				console.log(affectedRows + " record(s) inserted");
+			} catch(error)
+			{
+				console.error("Error adding country:", error);
+			}
+		});
+	}
+
 	public static async CreateUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) {
 		return new Promise((resolve, reject) => {
 			this.DoIfConnected(async (connection) => {
