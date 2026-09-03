@@ -1,5 +1,5 @@
-import mysql, { type OkPacketParams, type Pool, type ResultSetHeader, type RowDataPacket } from "mysql2";
-import cron from "node-cron";
+import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from "mysql2";
+import { Utils } from "./Utils/Utils.js"
 
 interface Word extends RowDataPacket {
 	id: number;
@@ -8,6 +8,7 @@ interface Word extends RowDataPacket {
 	prefix: string;
 	english: string;
 }
+
 interface Verb extends RowDataPacket {
 	id: number;
 	french: string;
@@ -20,6 +21,14 @@ interface Country extends RowDataPacket {
 	id: number;
 	french: string;
 	english: string;
+}
+
+export class Tables {
+	public static WORDS 	= "words";
+	public static VERBS 	= "verbs";
+	public static COUNTRY 	= "country";
+	public static GRAMMAR 	= "grammar";
+	public static GAMING 	= "gaming";
 }
 
 export class DatabaseConnection {
@@ -41,22 +50,153 @@ export class DatabaseConnection {
 	static cachedGrammar: Word[] = [];
 	static cachedGaming: Word[] = [];
 
-	public static DoIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>) {
-		try {
+	public static async DoIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
+		return new Promise((resolve, reject) => {
 			this.con.getConnection(function (err, connection) {
 				if (err) {
 					console.error("Error connecting to database:", err);
+					reject(err);
 					return;
 				}
 
 				!(async function () {
-					await callback(connection);
-					connection.release();
+					try {
+						await callback(connection);
+					}
+					catch(error) {
+						console.error("Cannot call callback in DoIfConnected : ", error);
+						reject(error);
+						return;
+					}
+					finally {
+						connection.release();
+					}
+					resolve();
 				})();
 			});
-		} catch (error) {
-			console.error("Error connecting to database:", error);
+		});
+	}
+
+	public static async InsertIntoTable(table : string, data : any)
+	{
+		var baseQuery = Utils.format("INSERT INTO `{0}`", table);
+		var varNames = "";
+		var varFields = "";
+		var varFieldData : any[] = [];
+		var isFirst = true;
+
+		var entries = Object.entries(data);
+
+		for(var i = 0; i < entries.length; i++)
+		{
+			var field = entries[i];
+			var fieldName = field?.[0];
+			if(!fieldName)
+				continue;
+
+			var fieldData : any = field?.[1];
+			console.log("Field Name :", fieldName)
+			varFieldData.push(fieldData);
+
+			if(isFirst)
+			{
+				isFirst = false;
+				varNames += Utils.format("`{0}`", fieldName);
+				varFields += "?";
+				continue;
+			}
+
+			varNames += Utils.format(", `{0}`", fieldName);
+			varFields += ", ?";
 		}
+
+		var query = Utils.format("{0} ({1}) VALUES ({2})", baseQuery, varNames, varFields);
+		console.log("Query : ", query);
+
+		var returnId = -1;
+		await this.DoIfConnected(async (connection) => {
+			try {
+				var result = await connection.promise().query<ResultSetHeader>(query, varFieldData);
+				var affectedRows = result[0].affectedRows;
+				console.log(affectedRows + " record(s) inserted");
+
+				var insertedId = result[0].insertId;
+				if(insertedId)
+					returnId = insertedId;
+			} catch (error) {
+				console.error("Unable to insert into database : ", error);
+			}
+		});
+
+		return returnId;
+	}
+
+	public static async ChangeRow(table: string, id : number, data : any)
+	{
+		var baseQuery = Utils.format("UPDATE `{0}` SET", table);
+
+		var varFields = "";
+		var varFieldData : any[] = [];
+		var isFirst = true;
+
+		var entries = Object.entries(data);
+
+		for(var i = 0; i < entries.length; i++)
+		{
+			var field = entries[i];
+			var fieldName = field?.[0];
+			if(!fieldName)
+				continue;
+
+			var fieldData : any = field?.[1];
+			console.log("Field Name :", fieldName)
+			varFieldData.push(fieldData);
+
+			if(isFirst)
+			{
+				isFirst = false;
+				varFields += Utils.format("`{0}` = ?", fieldName);
+				continue;
+			}
+
+			varFields += Utils.format(", `{0}` = ?", fieldName);
+		}
+		
+		var id_check = Utils.format("WHERE `ID` = {0}", id);
+
+		var query = Utils.format("{0} {1} {2}", baseQuery, varFields, id_check);
+		console.log("Query : ", query);
+
+		var returnId = -1;
+		await this.DoIfConnected(async (connection) => {
+			try {
+				var result = await connection.promise().query<ResultSetHeader>(query, varFieldData);
+				var affectedRows = result[0].affectedRows;
+				console.log(affectedRows + " record(s) updated");
+
+				var insertedId = result[0].insertId;
+				if(insertedId)
+					returnId = insertedId;
+			} catch (error) {
+				console.error("Unable to update row ", id ," from database : ", error);
+			}
+		});
+
+		return returnId;
+	}
+
+	public static async RemoveFromTable(table : string, id : number) 
+	{
+		this.DoIfConnected(async (connection) => {
+			try {
+				var query = Utils.format("DELETE FROM `{0}` WHERE `id` = ?", table);
+				var result = await connection.promise().query<ResultSetHeader>(query, [id]);
+				var affectedRows = result[0].affectedRows;
+				console.log(affectedRows + " record(s) deleted");
+			} catch (error) {
+				console.error("Error deleting word:", error);
+			}
+		});
 	}
 
 	public static GetWords() {
@@ -122,59 +262,6 @@ export class DatabaseConnection {
 			}
 		});
 		return this.cachedGaming;
-	}
-
-	public static AddWord(french: string, context: string, prefix: string, english: string) {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "INSERT INTO `words` (`french`, `context`, `prefix`, `english`) VALUES (?, ?, ?, ?)";
-				var result = await connection.promise().query<ResultSetHeader>(query, [french, context, prefix, english]);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) inserted");
-			} catch (error) {
-				console.error("Error adding word:", error);
-			}
-		});
-	}
-
-	public static ChangeWord(id: number, french: string, context: string, prefix: string, english: string) {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "UPDATE `words` SET `french` = ?, `context` = ?, `prefix` = ?, `english` = ? WHERE `id` = ?";
-				var result = await connection.promise().query<ResultSetHeader>(query, [french, context, prefix, english, id]);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) updated");
-			} catch (error) {
-				console.error("Error updating word:", error);
-			}
-		});
-	}
-
-	public static RemoveWord(id: number) {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "DELETE FROM `words` WHERE `id` = ?";
-				var result = await connection.promise().query<ResultSetHeader>(query, [id]);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) deleted");
-			} catch (error) {
-				console.error("Error deleting word:", error);
-			}
-		});
-	}
-
-	public static AddCountry(french : string, english : string) {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "INSERT INTO `country` (`french`, `english`) VALUES (?, ?)";
-				var result = await connection.promise().query<ResultSetHeader>(query, [french, english]);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) inserted");
-			} catch(error)
-			{
-				console.error("Error adding country:", error);
-			}
-		});
 	}
 
 	public static async CreateUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) {

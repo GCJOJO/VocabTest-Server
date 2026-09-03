@@ -7,7 +7,7 @@ import http from "http";
 import https from "https";
 
 import { GameManager } from "./GameManager.js";
-import { DatabaseConnection } from "./DatabaseConnection.js";
+import { DatabaseConnection, Tables } from "./DatabaseConnection.js";
 import { UserManager } from "./UserManager.js";
 import { SocketServer } from "./SocketServer.js";
 import { Constants } from "./Constants.js";
@@ -185,10 +185,12 @@ app.get("/gaming-list" , async (req : any, res : any) => {
 	}
 });
 
+
+
 app.post("/add-word", jsonParser, async (req : any, res : any) => {
 	try {
-		await DatabaseConnection.AddWord(req.body.french, req.body.context, req.body.prefix, req.body.english);
-		res.send({ action: "word-added", word: { français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
+		var word_id = DatabaseConnection.InsertIntoTable(Tables.WORDS, {french: req.body.french, context: req.body.context, prefix: req.body.prefix, english: req.body.english});
+		res.send({ action: "word-added", word: { id: word_id, français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
 	}
 	catch (error) {
 		console.error("Error adding word:", error);
@@ -198,8 +200,8 @@ app.post("/add-word", jsonParser, async (req : any, res : any) => {
 
 app.post("/change-word", jsonParser, async (req : any, res : any) => {
 	try {
-		await DatabaseConnection.ChangeWord(req.body.id, req.body.french, req.body.context, req.body.prefix, req.body.english);
-		res.send({ action: "word-changed", word: { français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
+		var word_id = await DatabaseConnection.ChangeRow(Tables.WORDS, req.body.id, {french : req.body.french, context: req.body.context, english : req.body.english});
+		res.send({ action: "word-changed", word_id : word_id});
 	}
 	catch (error) {
 		console.error("Error changing word:", error);
@@ -209,7 +211,7 @@ app.post("/change-word", jsonParser, async (req : any, res : any) => {
 
 app.post("/remove-word", jsonParser, async (req : any, res : any) => {
 	try {
-		await DatabaseConnection.RemoveWord(req.body.id);
+		await DatabaseConnection.RemoveFromTable(Tables.WORDS, req.body.id);
 		res.send({ action: "word-removed", word: { id: req.body.id } });
 	}
 	catch (error) {
@@ -217,6 +219,148 @@ app.post("/remove-word", jsonParser, async (req : any, res : any) => {
 		res.send({ action: "remove-word-failed" });
 	}
 });
+
+
+
+app.post("/add-verb", jsonParser, async (req : any, res : any) => {
+	try {
+		var word_id = DatabaseConnection.InsertIntoTable(Tables.VERBS, {french: req.body.french, context: req.body.context, infinitive : req.body.infinitive, preterit : req.body.preterit, past_participle : req.body.past_participle});
+		res.send({ action: "verb-added", word: { id: word_id, french: req.body.french, context: req.body.context, infinitive : req.body.infinitive, preterit : req.body.preterit, past_participle : req.body.past_participle} });
+	}
+	catch (error) {
+		console.error("Error adding verb:", error);
+		res.send({ action: "add-verb-failed" });
+	}
+});
+
+app.post("/change-verb", jsonParser, async (req : any, res : any) => {
+	try {
+		var word_id = await DatabaseConnection.ChangeRow(Tables.VERBS, req.body.id, {french: req.body.french, context: req.body.context, infinitive : req.body.infinitive, preterit : req.body.preterit, past_participle : req.body.past_participle});
+		res.send({ action: "verb-changed", word_id : word_id});
+	}
+	catch (error) {
+		console.error("Error changing verb:", error);
+		res.send({ action: "change-verb-failed" });
+	}
+});
+
+app.post("/remove-verb", jsonParser, async (req : any, res : any) => {
+	try {
+		await DatabaseConnection.RemoveFromTable(Tables.VERBS, req.body.id);
+		res.send({ action: "verb-removed", word: { id: req.body.id } });
+	}
+	catch (error) {
+		console.error("Error removing verb:", error);
+		res.send({ action: "remove-verb-failed" });
+	}
+});
+
+
+
+app.post("/add-grammar", jsonParser, async (req : any, res : any) => {
+	try {
+		var word_id = DatabaseConnection.InsertIntoTable(Tables.GRAMMAR, {english: req.body.english, french: req.body.french, category: req.body.category, prefix: req.body.prefix});
+		res.send({ action: "grammar-added", word: { id: word_id, english: req.body.english, french: req.body.french, category: req.body.category, prefix: req.body.prefix } });
+	}
+	catch (error) {
+		console.error("Error adding grammar:", error);
+		res.send({ action: "add-grammar-failed" });
+	}
+});
+
+app.post("/change-grammar", jsonParser, async (req : any, res : any) => {
+	try {
+		var word_id = await DatabaseConnection.ChangeRow(Tables.GRAMMAR, req.body.id, {english: req.body.english, french: req.body.french, category: req.body.category, prefix: req.body.prefix});
+		res.send({ action: "grammar-changed", word_id : word_id});
+	}
+	catch (error) {
+		console.error("Error changing grammar:", error);
+		res.send({ action: "change-grammar-failed" });
+	}
+});
+
+app.post("/remove-grammar", jsonParser, async (req : any, res : any) => {
+	try {
+		await DatabaseConnection.RemoveFromTable(Tables.GRAMMAR, req.body.id);
+		res.send({ action: "grammar-removed", word: { id: req.body.id } });
+	}
+	catch (error) {
+		console.error("Error removing grammar:", error);
+		res.send({ action: "remove-grammar-failed" });
+	}
+});
+
+
+
+app.post("/add-country", jsonParser, async (req : any, res : any) => {
+	try{
+		var country_id = await DatabaseConnection.InsertIntoTable(Tables.COUNTRY, {french: req.body.french, english: req.body.english});
+		res.send({ action : "country-added", country: { id: country_id, french : req.body.french, english: req.body.english }});
+	}
+	catch (error) {
+		console.error("Error adding country:", error);
+		res.send({ action: "add-country-failed" });
+	}
+});
+
+app.post("/change-country", jsonParser, async (req : any, res : any) => {
+	try {
+		await DatabaseConnection.ChangeRow(Tables.COUNTRY, req.body.id, { french: req.body.french, english: req.body.english });
+		res.send({ action: "country-changed", word: { id: req.body.id } });
+	}
+	catch (error) {
+		console.error("Error changing country:", error);
+		res.send({ action: "change-country-failed" });
+	}
+});
+
+app.post("/remove-country", jsonParser, async (req : any, res : any) => {
+	try {
+		await DatabaseConnection.RemoveFromTable(Tables.WORDS, req.body.id);
+		res.send({ action: "country-removed", word: { id: req.body.id } });
+	}
+	catch (error) {
+		console.error("Error removing country:", error);
+		res.send({ action: "remove-country-failed" });
+	}
+});
+
+
+/*
+app.post("/add-gaming", jsonParser, async (req : any, res : any) => {
+	try{
+		var country_id = await DatabaseConnection.InsertIntoTable(Tables.GAMING, {french: req.body.french, english: req.body.english});
+		res.send({ action : "gaming-added", country: { id: country_id, french : req.body.french, english: req.body.english }});
+	}
+	catch (error) {
+		console.error("Error adding gaming:", error);
+		res.send({ action: "add-gaming-failed" });
+	}
+});
+
+app.post("/change-gaming", jsonParser, async (req : any, res : any) => {
+	try {
+		await DatabaseConnection.ChangeRow(Tables.GAMING, req.body.id, { french: req.body.french, english: req.body.english });
+		res.send({ action: "gaming-changed", word: { id: req.body.id } });
+	}
+	catch (error) {
+		console.error("Error changing country:", error);
+		res.send({ action: "change-gaming-failed" });
+	}
+});
+
+app.post("/remove-gaming", jsonParser, async (req : any, res : any) => {
+	try {
+		await DatabaseConnection.RemoveFromTable(Tables.GAMING, req.body.id);
+		res.send({ action: "gaming-removed", word: { id: req.body.id } });
+	}
+	catch (error) {
+		console.error("Error removing country:", error);
+		res.send({ action: "remove-gaming-failed" });
+	}
+});
+*/
+
 
 app.post("/register", jsonParser, async (req : any, res : any) => {
 	try {
@@ -326,6 +470,8 @@ app.get("/owner/:lobby_id", jsonParser, async (req : any, res : any) => {
 httpServer.listen(Constants.SERVER_PORT, () => {
 	console.log(`HTTP Server running on port ${Constants.SERVER_PORT}`);
 });
+
+
 
 console.log("Server running !");
 

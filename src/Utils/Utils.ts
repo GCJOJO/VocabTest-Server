@@ -2,6 +2,15 @@ import crypto from "crypto";
 
 export class Utils
 {
+    public static nameOf = (f : any) => (f).toString().replace(/[ |\(\)=>]/g,'');
+
+    public static format(template: string, ...args: (string | number)[]): string {
+        return template.replace(/{(\d+)}/g, (match, index) => {
+            const i = Number(index);
+            return typeof args[i] !== 'undefined' ? String(args[i]) : match;
+        });
+    }
+
     public static shuffle(array : any[]) : any[]
     {
         let arrayCopy = array;
