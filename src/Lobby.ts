@@ -5,7 +5,7 @@ import { Constants } from "./Constants.js";
 import { Utils } from "./Utils/Utils.js";
 import { MapUtils } from "./Utils/MapUtils.js";
 
-import { DatabaseConnection } from "./DatabaseConnection.js";
+import { DatabaseConnection, Tables, type Word, type Verb, type Country } from "./DatabaseConnection.js";
 
 enum LobbyState
 {
@@ -121,7 +121,7 @@ export class Lobby
 		this.players.forEach((player) => player.websocket.send(JSON.stringify({ action: "new-owner", player_id: this.owner_id })));
     }
 
-    public StartLobby() : void
+    public async StartLobby()
     {
         if (this.state != LobbyState.Waiting) 
             return;
@@ -142,10 +142,10 @@ export class Lobby
 
         this.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
 
-        let randomizedWords = Utils.shuffle(DatabaseConnection.GetWords());
-        let randomizedVerbs = Utils.shuffle(DatabaseConnection.GetVerbs());
-        let randomizedCountries = Utils.shuffle(DatabaseConnection.GetCountries());
-        let randomizedGrammar = Utils.shuffle(DatabaseConnection.GetGrammar());
+        let randomizedWords = Utils.shuffle(await DatabaseConnection.GetTable<Word>(Tables.WORDS));
+        let randomizedVerbs = Utils.shuffle(await DatabaseConnection.GetTable<Verb>(Tables.VERBS));
+        let randomizedCountries = Utils.shuffle(await DatabaseConnection.GetTable<Country>(Tables.COUNTRY));
+        let randomizedGrammar = Utils.shuffle(await DatabaseConnection.GetTable<Word>(Tables.GRAMMAR));
 
         let questionCategoryAmounts : { [key: number]: number } = {};
         let questionCategoryMaxAmounts : { [key: number]: number } = {};

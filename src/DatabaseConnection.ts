@@ -1,7 +1,7 @@
 import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from "mysql2";
 import { Utils } from "./Utils/Utils.js"
 
-interface Word extends RowDataPacket {
+export interface Word extends RowDataPacket {
 	id: number;
 	french: string;
 	context: string;
@@ -9,7 +9,7 @@ interface Word extends RowDataPacket {
 	english: string;
 }
 
-interface Verb extends RowDataPacket {
+export interface Verb extends RowDataPacket {
 	id: number;
 	french: string;
 	infinitive: string;
@@ -17,11 +17,12 @@ interface Verb extends RowDataPacket {
 	past_participle: string;
 }
 
-interface Country extends RowDataPacket {
+export interface Country extends RowDataPacket {
 	id: number;
 	french: string;
 	english: string;
 }
+
 
 export class Tables {
 	public static WORDS 	= "words";
@@ -44,11 +45,6 @@ export class DatabaseConnection {
 		keepAliveInitialDelay: 0,
 	});
 
-	static cachedWords: Word[] = [];
-	static cachedVerbs: Verb[] = [];
-	static cachedCountries: Country[] = [];
-	static cachedGrammar: Word[] = [];
-	static cachedGaming: Word[] = [];
 
 	public static async DoIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
 		return new Promise((resolve, reject) => {
@@ -199,69 +195,19 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static GetWords() {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "SELECT * FROM `words`";
-				var [rows] = await connection.promise().query<Word[]>(query);
-				this.cachedWords = rows;
-			} catch (error) {
-				console.error("Error fetching words:", error);
-			}
+	public static async GetTable<T extends RowDataPacket>(table : string): Promise<T[]>
+	{
+		return new Promise((resolve, reject) => {
+			this.DoIfConnected(async (connection) => {
+				try {
+					var query = Utils.format("SELECT * FROM `{0}`", table);
+					var [rows] = await connection.promise().query<T[]>(query);
+					resolve(rows);
+				} catch (error) {
+					console.error("Error fetching table ", table, ", ", error);
+				}
+			});
 		});
-		return this.cachedWords;
-	}
-
-	public static GetVerbs() {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "SELECT * FROM `verbs`";
-				var [rows] = await connection.promise().query<Verb[]>(query);
-				this.cachedVerbs = rows;
-			} catch (error) {
-				console.error("Error fetching verbs:", error);
-			}
-		});
-		return this.cachedVerbs;
-	}
-
-	public static GetCountries() {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "SELECT * FROM `country`";
-				var [rows] = await connection.promise().query<Country[]>(query);
-				this.cachedCountries = rows;
-			} catch (error) {
-				console.error("Error fetching countries:", error);
-			}
-		});
-		return this.cachedCountries;
-	}
-
-	public static GetGrammar() {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "SELECT * FROM `grammar`";
-				var [rows] = await connection.promise().query<Word[]>(query);
-				this.cachedGrammar = rows;
-			} catch (error) {
-				console.error("Error fetching grammar:", error);
-			}
-		});
-		return this.cachedGrammar;
-	}
-
-	public static GetGaming() {
-		this.DoIfConnected(async (connection) => {
-			try {
-				var query = "SELECT * FROM `gaming`";
-				var [rows] = await connection.promise().query<Word[]>(query);
-				this.cachedGaming = rows;
-			} catch (error) {
-				console.error("Error fetching gaming:", error);
-			}
-		});
-		return this.cachedGaming;
 	}
 
 	public static async CreateUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) {

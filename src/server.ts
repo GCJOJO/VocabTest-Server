@@ -7,7 +7,7 @@ import http from "http";
 import https from "https";
 
 import { GameManager } from "./GameManager.js";
-import { DatabaseConnection, Tables } from "./DatabaseConnection.js";
+import { DatabaseConnection, Tables, type Word, type Verb, type Country } from "./DatabaseConnection.js";
 import { UserManager } from "./UserManager.js";
 import { SocketServer } from "./SocketServer.js";
 import { Constants } from "./Constants.js";
@@ -137,7 +137,7 @@ app.get("/version", (req : any, res : any) => {
 
 app.get("/words-list", async (req : any, res : any) => {
 	try {
-		let words : any = await DatabaseConnection.GetWords();
+		let words : any = await DatabaseConnection.GetTable<Word>(Tables.WORDS);
 		res.send({ action: "words-list", words: words });
 	}
 	catch (error) {
@@ -147,7 +147,7 @@ app.get("/words-list", async (req : any, res : any) => {
 
 app.get("/verbs-list", async (req : any, res : any) => {
 	try {
-		let verbs : any = await DatabaseConnection.GetVerbs();
+		let verbs : any = await DatabaseConnection.GetTable<Verb>(Tables.VERBS);
 		res.send({ action: "verbs-list", verbs: verbs });
 	}
 	catch (error) {
@@ -157,7 +157,7 @@ app.get("/verbs-list", async (req : any, res : any) => {
 
 app.get("/countries-list", async (req : any, res : any) => {
 	try {
-		let countries : any = await DatabaseConnection.GetCountries();
+		let countries : any = await DatabaseConnection.GetTable<Country>(Tables.COUNTRY);
 		res.send({ action: "countries-list", countries: countries });
 	}
 	catch (error) {
@@ -167,7 +167,7 @@ app.get("/countries-list", async (req : any, res : any) => {
 
 app.get("/grammar-list", async (req : any, res : any) => {
 	try {
-		let grammar : any = await DatabaseConnection.GetGrammar();
+		let grammar : any = await DatabaseConnection.GetTable<Word>(Tables.GRAMMAR);
 		res.send({ action: "grammar-list", grammar: grammar });
 	}
 	catch (error) {
@@ -177,7 +177,7 @@ app.get("/grammar-list", async (req : any, res : any) => {
 
 app.get("/gaming-list" , async (req : any, res : any) => {
 	try {
-		let gaming : any = await DatabaseConnection.GetGaming();
+		let gaming : any = await DatabaseConnection.GetTable<Word>(Tables.GAMING);
 		res.send({ action: "gaming-list", gaming: gaming });
 	}
 	catch (error) {
@@ -474,8 +474,3 @@ httpServer.listen(Constants.SERVER_PORT, () => {
 
 
 console.log("Server running !");
-
-DatabaseConnection.GetWords();
-DatabaseConnection.GetVerbs();
-DatabaseConnection.GetCountries();
-DatabaseConnection.GetGrammar();
