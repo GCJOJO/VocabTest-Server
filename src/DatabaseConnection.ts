@@ -245,6 +245,24 @@ export class DatabaseConnection {
 		});
 	}
 
+	public static async IsUserAdmin(uuid : string) {
+		return new Promise((resolve, reject) => {
+			this.DoIfConnected(async (connection) => {
+				try {
+					var query = "SELECT `uuid` WHERE `uuid` = ? AND `is_admin` = 1";
+					var [rows, fields] = await connection.promise().query<RowDataPacket[]>(query, [uuid]);
+					if (rows.length > 0 && rows[0] != null) {
+						resolve({ success: true, });
+					} else {
+						resolve({ success: false });
+					}
+				} catch (e) {
+					reject(e);
+				}
+			});
+		});
+	}
+
 	public static async GetUserInfo(user_id: string) {
 		return new Promise((resolve, reject) => {
 			this.DoIfConnected(async (connection) => {

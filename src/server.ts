@@ -189,6 +189,11 @@ app.get("/gaming-list" , async (req : any, res : any) => {
 
 app.post("/add-word", jsonParser, async (req : any, res : any) => {
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		var word_id = DatabaseConnection.InsertIntoTable(Tables.WORDS, {french: req.body.french, context: req.body.context, prefix: req.body.prefix, english: req.body.english});
 		res.send({ action: "word-added", word: { id: word_id, français: req.body.french, contexte: req.body.context, prefix: req.body.prefix, anglais: req.body.english } });
 	}
@@ -200,6 +205,11 @@ app.post("/add-word", jsonParser, async (req : any, res : any) => {
 
 app.post("/change-word", jsonParser, async (req : any, res : any) => {
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		var word_id = await DatabaseConnection.ChangeRow(Tables.WORDS, req.body.id, {french : req.body.french, context: req.body.context, english : req.body.english});
 		res.send({ action: "word-changed", word_id : word_id});
 	}
@@ -211,6 +221,11 @@ app.post("/change-word", jsonParser, async (req : any, res : any) => {
 
 app.post("/remove-word", jsonParser, async (req : any, res : any) => {
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		await DatabaseConnection.RemoveFromTable(Tables.WORDS, req.body.id);
 		res.send({ action: "word-removed", word: { id: req.body.id } });
 	}
@@ -224,6 +239,11 @@ app.post("/remove-word", jsonParser, async (req : any, res : any) => {
 
 app.post("/add-verb", jsonParser, async (req : any, res : any) => {
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		var word_id = DatabaseConnection.InsertIntoTable(Tables.VERBS, {french: req.body.french, context: req.body.context, infinitive : req.body.infinitive, preterit : req.body.preterit, past_participle : req.body.past_participle});
 		res.send({ action: "verb-added", word: { id: word_id, french: req.body.french, context: req.body.context, infinitive : req.body.infinitive, preterit : req.body.preterit, past_participle : req.body.past_participle} });
 	}
@@ -234,7 +254,12 @@ app.post("/add-verb", jsonParser, async (req : any, res : any) => {
 });
 
 app.post("/change-verb", jsonParser, async (req : any, res : any) => {
-	try {
+		try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		var word_id = await DatabaseConnection.ChangeRow(Tables.VERBS, req.body.id, {french: req.body.french, context: req.body.context, infinitive : req.body.infinitive, preterit : req.body.preterit, past_participle : req.body.past_participle});
 		res.send({ action: "verb-changed", word_id : word_id});
 	}
@@ -244,8 +269,13 @@ app.post("/change-verb", jsonParser, async (req : any, res : any) => {
 	}
 });
 
-app.post("/remove-verb", jsonParser, async (req : any, res : any) => {
+app.post("/remove-verb", jsonParser, async (req : any, res : any) => {	
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		await DatabaseConnection.RemoveFromTable(Tables.VERBS, req.body.id);
 		res.send({ action: "verb-removed", word: { id: req.body.id } });
 	}
@@ -257,8 +287,13 @@ app.post("/remove-verb", jsonParser, async (req : any, res : any) => {
 
 
 
-app.post("/add-grammar", jsonParser, async (req : any, res : any) => {
+app.post("/add-grammar", jsonParser, async (req : any, res : any) => {	
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		var word_id = DatabaseConnection.InsertIntoTable(Tables.GRAMMAR, {english: req.body.english, french: req.body.french, category: req.body.category, prefix: req.body.prefix});
 		res.send({ action: "grammar-added", word: { id: word_id, english: req.body.english, french: req.body.french, category: req.body.category, prefix: req.body.prefix } });
 	}
@@ -270,6 +305,11 @@ app.post("/add-grammar", jsonParser, async (req : any, res : any) => {
 
 app.post("/change-grammar", jsonParser, async (req : any, res : any) => {
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		var word_id = await DatabaseConnection.ChangeRow(Tables.GRAMMAR, req.body.id, {english: req.body.english, french: req.body.french, category: req.body.category, prefix: req.body.prefix});
 		res.send({ action: "grammar-changed", word_id : word_id});
 	}
@@ -281,6 +321,11 @@ app.post("/change-grammar", jsonParser, async (req : any, res : any) => {
 
 app.post("/remove-grammar", jsonParser, async (req : any, res : any) => {
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return
+		}	
 		await DatabaseConnection.RemoveFromTable(Tables.GRAMMAR, req.body.id);
 		res.send({ action: "grammar-removed", word: { id: req.body.id } });
 	}
@@ -293,7 +338,13 @@ app.post("/remove-grammar", jsonParser, async (req : any, res : any) => {
 
 
 app.post("/add-country", jsonParser, async (req : any, res : any) => {
+	
 	try{
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		var country_id = await DatabaseConnection.InsertIntoTable(Tables.COUNTRY, {french: req.body.french, english: req.body.english});
 		res.send({ action : "country-added", country: { id: country_id, french : req.body.french, english: req.body.english }});
 	}
@@ -303,8 +354,13 @@ app.post("/add-country", jsonParser, async (req : any, res : any) => {
 	}
 });
 
-app.post("/change-country", jsonParser, async (req : any, res : any) => {
+app.post("/change-country", jsonParser, async (req : any, res : any) => {	
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
 		await DatabaseConnection.ChangeRow(Tables.COUNTRY, req.body.id, { french: req.body.french, english: req.body.english });
 		res.send({ action: "country-changed", word: { id: req.body.id } });
 	}
@@ -314,8 +370,14 @@ app.post("/change-country", jsonParser, async (req : any, res : any) => {
 	}
 });
 
-app.post("/remove-country", jsonParser, async (req : any, res : any) => {
+app.post("/remove-country", jsonParser, async (req : any, res : any) => {	
 	try {
+		if(!DatabaseConnection.IsUserAdmin(req.body.user_id))
+		{
+			res.send({ error: "user-not-admin" });
+			return;
+		}
+
 		await DatabaseConnection.RemoveFromTable(Tables.WORDS, req.body.id);
 		res.send({ action: "country-removed", word: { id: req.body.id } });
 	}
