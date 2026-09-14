@@ -438,6 +438,7 @@ app.post("/register", jsonParser, async (req : any, res : any) => {
 
 app.post("/login", jsonParser, async (req : any, res : any) => {
 	try {
+		console.log(req.body);
 		var result = await UserManager.login(req.body.username, req.body.password_hash);
 		if (result.success) res.send({ action: "login-success", user_uuid: result.uuid });
 		else res.send({ action: "login-failed" });
@@ -525,6 +526,17 @@ app.get("/owner/:lobby_id", jsonParser, async (req : any, res : any) => {
 	catch (error) {
 		console.error("Error testing lobby ownership:", error);
 		res.send({ action: "test-ownership", result: false });
+	}
+});
+
+app.get("/me", jsonParser, async (req : any, res : any) => {
+	try{
+		const user_id = req.body.user_id;
+		let user = await UserManager.getUserInfo(user_id);
+		res.send({ user : user });
+	}
+	catch (error) {
+		console.error("Error /me :", req.body.user_id);
 	}
 });
 
