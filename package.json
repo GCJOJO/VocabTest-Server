@@ -1,6 +1,6 @@
 {
   "name": "vocabtest-nodeserver",
-  "module": "index.ts",
+  "module": "src/Server.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -8,5 +8,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "mysql2": "^3.24.4"
   }
 }
