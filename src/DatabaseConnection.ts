@@ -33,19 +33,31 @@ export class Tables {
 }
 
 export class DatabaseConnection {
-	static con: Pool = mysql.createPool({
-		host: "localhost",
-		user: "vocab-test",
-		password: "bonjoirjesuisleservernode",
-		database: "vocab-test",
-		waitForConnections: true,
-		connectionLimit: 10,
-		queueLimit: 10,
-		enableKeepAlive: true,
-		keepAliveInitialDelay: 0,
-	}); 
+	static con: Pool;
 
-	public static async DoIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
+	public static async init()
+	{
+		try{
+			DatabaseConnection.con = mysql.createPool({
+				host: "localhost",
+				user: "vocab-test",
+				password: "bonjoirjesuisleservernode",
+				database: "vocab-test",
+				waitForConnections: true,
+				connectionLimit: 10,
+				queueLimit: 10,
+				enableKeepAlive: true,
+				keepAliveInitialDelay: 0,
+			});
+			console.log("Connected to database !"); 
+		}
+		catch(error : any)
+		{
+			console.error("Couldn't connect to database !", error);
+		}
+	}
+
+	public static async doIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
 		const connection = await this.con.getConnection();
 		
 		try {
@@ -61,7 +73,7 @@ export class DatabaseConnection {
 		}
 	}
 
-	public static async InsertIntoTable(table : string, data : any)
+	public static async insertIntoTable(table : string, data : any)
 	{
 		var baseQuery = Utils.format("INSERT INTO `{0}`", table);
 		var varNames = "";
@@ -98,7 +110,7 @@ export class DatabaseConnection {
 		console.log("Query : ", query);
 
 		var returnId = -1;
-		await this.DoIfConnected(async (connection) => {
+		await this.doIfConnected(async (connection) => {
 			try {
 				var result = await connection.query<ResultSetHeader>(query, varFieldData);
 				var affectedRows = result[0].affectedRows;
@@ -115,7 +127,7 @@ export class DatabaseConnection {
 		return returnId;
 	}
 
-	public static async ChangeRow(table: string, id : number, data : any)
+	public static async changeRow(table: string, id : number, data : any)
 	{
 		var baseQuery = Utils.format("UPDATE `{0}` SET", table);
 
@@ -152,7 +164,7 @@ export class DatabaseConnection {
 		console.log("Query : ", query);
 
 		var returnId = -1;
-		await this.DoIfConnected(async (connection) => {
+		await this.doIfConnected(async (connection) => {
 			try {
 				var result = await connection.query<ResultSetHeader>(query, varFieldData);
 				var affectedRows = result[0].affectedRows;
@@ -169,9 +181,9 @@ export class DatabaseConnection {
 		return returnId;
 	}
 
-	public static async RemoveFromTable(table : string, id : number) 
+	public static async removeFromTable(table : string, id : number) 
 	{
-		this.DoIfConnected(async (connection) => {
+		this.doIfConnected(async (connection) => {
 			try {
 				var query = Utils.format("DELETE FROM `{0}` WHERE `id` = ?", table);
 				var result = await connection.query<ResultSetHeader>(query, [id]);
@@ -183,10 +195,10 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async GetTable<T extends RowDataPacket>(table : string): Promise<T[]>
+	public static async getTable<T extends RowDataPacket>(table : string): Promise<T[]>
 	{
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
 					var query = Utils.format("SELECT * FROM `{0}`", table);
 					var [rows] = await connection.query<T[]>(query);
@@ -199,9 +211,9 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async CreateUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) {
+	public static async createUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
 					var query = "INSERT INTO `users` (`uuid`, `username`, `first_name`, `last_name`, `password_hash`) VALUES (?, ?,  ?, ?, ?)";
 					var result = await connection.query<ResultSetHeader>(query, [uuid, username, first_name, last_name, password_hash]);
@@ -216,14 +228,15 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async Login(username: string, password: string) {
+	public static async login(username: string, password: string) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
-					var query = "SELECT `uuid` FROM `users` WHERE `username` = ?";
+					var query = "SELECT `uuid`, `username`, `password_hash` FROM `users` WHERE `username` = ?";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [username]);
 					if (rows.length > 0 && rows[0] != null) {
 						const user = rows[0];
+						console.log("Checking password ", password, " with ", user.password_hash)
 						if(await UserManager.check_password(password, user.password_hash))
 						{
 							resolve({ success: true, uuid: rows[0].uuid });
@@ -239,9 +252,9 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async IsUserAdmin(uuid : string) {
+	public static async isUserAdmin(uuid : string) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
 					var query = "SELECT `uuid` WHERE `uuid` = ? AND `is_admin` = 1";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [uuid]);
@@ -257,9 +270,9 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async GetUserInfo(user_id: string) {
+	public static async getUserInfo(user_id: string) : Promise<{success : boolean, user_info? : RowDataPacket}> {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
 					var query = "SELECT `uuid`, `username`, `first_name`, `last_name` FROM `users` WHERE `uuid` = ?";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [user_id]);
@@ -275,9 +288,9 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async GetUsersInfo(user_ids: string[]) {
+	public static async getUsersInfo(user_ids: string[]) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
 					var query = "SELECT `uuid`, `username`, `first_name`, `last_name` FROM `users` WHERE `uuid` IN (?)";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [user_ids]);
@@ -289,9 +302,9 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static GetUserScore(user_id: string) {
+	public static getUserScore(user_id: string) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
 					var query = "SELECT `score` FROM `users` WHERE `uuid` = ?";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [user_id]);
@@ -307,11 +320,11 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async UpdateUserScore(user_id: string, score: number) {
+	public static async updateUserScore(user_id: string, score: number) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
-					var current_score: any = await DatabaseConnection.GetUserScore(user_id);
+					var current_score: any = await DatabaseConnection.getUserScore(user_id);
 					if (!current_score.success) {
 						return resolve({ success: false });
 					}
@@ -335,9 +348,9 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async GetLeaderboard() {
+	public static async getLeaderboard() {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
 					var query = "SELECT `uuid`, `username`, `score` FROM `users` ORDER BY `score` DESC";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query);

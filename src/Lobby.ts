@@ -141,10 +141,10 @@ export class Lobby
 
         this.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
 
-        let randomizedWords = Utils.shuffle(await DatabaseConnection.GetTable<Word>(Tables.WORDS));
-        let randomizedVerbs = Utils.shuffle(await DatabaseConnection.GetTable<Verb>(Tables.VERBS));
-        let randomizedCountries = Utils.shuffle(await DatabaseConnection.GetTable<Country>(Tables.COUNTRY));
-        let randomizedGrammar = Utils.shuffle(await DatabaseConnection.GetTable<Word>(Tables.GRAMMAR));
+        let randomizedWords = Utils.shuffle(await DatabaseConnection.getTable<Word>(Tables.WORDS));
+        let randomizedVerbs = Utils.shuffle(await DatabaseConnection.getTable<Verb>(Tables.VERBS));
+        let randomizedCountries = Utils.shuffle(await DatabaseConnection.getTable<Country>(Tables.COUNTRY));
+        let randomizedGrammar = Utils.shuffle(await DatabaseConnection.getTable<Word>(Tables.GRAMMAR));
 
         let questionCategoryAmounts : { [key: number]: number } = {};
         let questionCategoryMaxAmounts : { [key: number]: number } = {};

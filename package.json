@@ -6,10 +6,14 @@
   "devDependencies": {
     "@types/bun": "latest"
   },
+  "scripts": {
+    "dev": "bun run src/Server.ts"
+  },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "jose": "^6.2.12",
     "mysql2": "^3.24.4"
   }
 }

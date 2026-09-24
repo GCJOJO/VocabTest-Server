@@ -18,7 +18,7 @@ export class UserManager
     {
         let uuid = Utils.uuidv4();
         let password_hash = await this.hash_password(password);
-        let result = await DatabaseConnection.CreateUser(uuid, username, first_name, last_name, password_hash);
+        let result = await DatabaseConnection.createUser(uuid, username, first_name, last_name, password_hash);
         const new_token = SessionManager.create_session(uuid);
         return { success: result, uuid: uuid, token : new_token };
     }
@@ -26,7 +26,7 @@ export class UserManager
     public static async login(username: string, password: string)
     {
         try {
-            let result : any = await DatabaseConnection.Login(username, password);
+            let result : any = await DatabaseConnection.login(username, password);
             if(result.success)
             {
                 const new_token = SessionManager.create_session(result.uuid);
@@ -41,7 +41,7 @@ export class UserManager
 
     public static async getUserInfo(user_id: string)
     {
-        let result : any = await DatabaseConnection.GetUserInfo(user_id);
+        let result : any = await DatabaseConnection.getUserInfo(user_id);
         if(result.success)
             return { success: true, user_info: result.user_info };
         return { success: false };
@@ -49,7 +49,7 @@ export class UserManager
 
     public static async getUsersInfo(user_ids: string[])
     {
-        let result : any = await DatabaseConnection.GetUsersInfo(user_ids);
+        let result : any = await DatabaseConnection.getUsersInfo(user_ids);
         if(result.success)
             return { success: true, users_info: result.users_info };
         return { success: false };
@@ -57,7 +57,7 @@ export class UserManager
 
     public static async updateUserScore(user_id: string, score: number)
     {
-        let result : any = await DatabaseConnection.UpdateUserScore(user_id, score);
+        let result : any = await DatabaseConnection.updateUserScore(user_id, score);
         if(result.success)
             return { success: true, new_score: result.new_score };
         return { success: false };
