@@ -13,7 +13,9 @@ const jwtSecret = Bun.env.JWT_SECRET;
  if (!jwtSecret) throw new Error("JWT_SECRET is required in file .env");
  const JWT_SECRET = new TextEncoder().encode(jwtSecret);
 
-const ALLOWED_ORIGIN = Bun.env.ALLOWED_ORIGIN ?? "http://localhost:5173";
+const ALLOWED_ORIGINS = (Bun.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
+    .split(",")
+    .map(o => o.trim());
 
 const DEBUG_FILE_PATH = join(process.cwd(), ".debug");
 
@@ -30,13 +32,18 @@ function debugLog(...args : unknown[]): void{
         console.log(...args);
 }
 
-function corsHeaders(): Record<string, string> {
-    return {
-        "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+function corsHeaders(req: Request): Record<string, string> {
+    const origin = req.headers.get("origin") ?? "";
+    const headers: Record<string, string> = {
         "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Vary": "Origin",
     };
+    if (ALLOWED_ORIGINS.includes(origin)) {
+        headers["Access-Control-Allow-Origin"] = origin;
+    }
+    return headers;
 }
 
 function cookieAttributes(maxAge: number): string[] {
@@ -93,13 +100,15 @@ Bun.serve({
 
         debugLog(url.pathname);
 
+        let headers = new Headers(corsHeaders(req));
+
         if (req.method === "OPTIONS") {
-            return new Response(null, { status: 204, headers: corsHeaders() });
+            return new Response(null, { status: 204, headers: headers });
         }
 
         if(url.pathname == "/version")
         {
-            return version();
+            return version(headers);
         }
 
         if(url.pathname == "/login" && req.method == "POST")
@@ -113,7 +122,7 @@ Bun.serve({
                 const login_result = await UserManager.login(username, password);
                 if(!login_result.success)
                 {
-                    return Response.json({message : login_result.error}, { status : 401, headers : corsHeaders() })
+                    return Response.json({message : login_result.error}, { status : 401, headers : headers });
                 }
 
                 const cookie_token = await new SignJWT({ token : login_result.token, uuid : login_result.uuid })
@@ -124,7 +133,6 @@ Bun.serve({
 
                 const cookie = [`auth_token=${cookie_token}`, ...cookieAttributes(2 * 60 * 60)].join("; ");
 
-                const headers = new Headers(corsHeaders());
                 headers.set("Content-Type", "application/json");
                 headers.set("Set-Cookie", cookie);
 
@@ -133,7 +141,7 @@ Bun.serve({
             }
             catch(e : any)
             {
-                return Response.json({ error : e.message }, { status : 400, headers: corsHeaders() });
+                return Response.json({ error : e.message }, { status : 400, headers: headers });
             }
         }
 
@@ -157,7 +165,6 @@ Bun.serve({
 
                 const cookie = [`auth_token=${cookie_token}`, ...cookieAttributes(2 * 60 * 60)].join("; ");
 
-                const headers = new Headers(corsHeaders());
                 headers.set("Content-Type", "application/json");
                 headers.set("Set-Cookie", cookie);
 
@@ -165,7 +172,7 @@ Bun.serve({
             }
             catch(e : any)
             {
-                return Response.json({ error : e.message }, { status : 400, headers: corsHeaders() });
+                return Response.json({ error : e.message }, { status : 400, headers: headers });
             }
         }
 
@@ -183,7 +190,6 @@ Bun.serve({
                     "Path=/",
                 ].join(';');
 
-                const headers = new Headers(corsHeaders());
                 headers.set("Content-Type", "application/json");
                 headers.set("Set-Cookie", cookie);
 
@@ -201,7 +207,7 @@ Bun.serve({
             {
                 const user_result = await UserManager.getUserInfo(user_id);
                 debugLog("/me : user result : ", user_result);
-                return Response.json({result : user_result}, { status: 200, headers: corsHeaders() });
+                return Response.json({result : user_result}, { status: 200, headers: headers });
             });
         }
 
@@ -209,14 +215,14 @@ Bun.serve({
         // {
         //     const words = await DatabaseConnection.getTable<Word>(Tables.WORDS);
         //     debugLog("words : ", words);
-        //     return Response.json({ "words" : words }, { status: 200, headers: corsHeaders() });
+        //     return Response.json({ "words" : words }, { status: 200, headers: headers });
         // }
 
         for (const list of vocabLists) {
-            const get_response = await handleVocabList(list.name, list.table, url, req.method);
+            const get_response = await handleVocabList(list.name, list.table, url, req.method, headers);
             if (get_response) return get_response; 
 
-            const edit_response = await handleVocabEdit(list, url, req);
+            const edit_response = await handleVocabEdit(list, url, req, headers);
             if(edit_response) return edit_response;
         }  
 
@@ -225,7 +231,7 @@ Bun.serve({
 
         if(url.pathname == "/lobbies")
         {
-            return Response.json({lobbies : GameManager.getLobbies()}, {status: 200, headers : corsHeaders()});
+            return Response.json({lobbies : GameManager.getLobbies()}, {status: 200, headers : headers});
         }
 
         const user_match = USER_ROUTE_PATTERN.exec(url);
@@ -235,8 +241,8 @@ Bun.serve({
             const result = await DatabaseConnection.getUserInfo(userId);
             debugLog("User Id : ", userId, " result :", result);
             if(result.success)
-                return Response.json({user_info: result.user_info}, { status: 200, headers: corsHeaders() });
-            return Response.json(result, { status: 400, headers: corsHeaders() });
+                return Response.json({user_info: result.user_info}, { status: 200, headers: headers });
+            return Response.json(result, { status: 400, headers: headers });
         }
 
         const owner_match = OWNER_ROUTE_PATTERN.exec(url);
@@ -245,8 +251,8 @@ Bun.serve({
             const lobbyId = owner_match.pathname.groups.id as string;
             const playerId = url.searchParams.get("player_id");
             if(!playerId)
-                return Response.json({message : "Invalid Player Id"}, { status: 400, headers: corsHeaders() });
-            return Response.json({ result: GameManager.testOwnership(lobbyId, playerId)}, {status : 200, headers: corsHeaders()});
+                return Response.json({message : "Invalid Player Id"}, { status: 400, headers: headers });
+            return Response.json({ result: GameManager.testOwnership(lobbyId, playerId)}, {status : 200, headers: headers});
         }
 
         if(url.pathname == "/ws")
@@ -255,11 +261,11 @@ Bun.serve({
             {
                 return;
             }
-            return new Response("Upgrade Failed", { status: 500, headers: corsHeaders() });
+            return new Response("Upgrade Failed", { status: 500, headers: headers });
         }
 
         //return Response.redirect("/version");
-        return new Response("Invalid request !", { status : 404, headers: corsHeaders() });
+        return new Response("Invalid request !", { status : 404, headers: headers });
     },
     websocket : {
         open(ws)
@@ -355,16 +361,18 @@ Bun.serve({
 async function check_user_token(req : Request, body : any, callback : (req : Request, body : any, user_id : string, token: string) => Promise<Response>): Promise<Response> {
     const auth = await getAuthPayload(req);
 
-    if (!auth || !auth.token) return Response.json({ error: "Unauthentificated" }, { status: 401, headers: corsHeaders() });
+    let headers = new Headers(corsHeaders(req));
+
+    if (!auth || !auth.token) return Response.json({ error: "Unauthentificated" }, { status: 401, headers: headers });
 
   const user_id = SessionManager.verify_session(auth.token);
-  if (!user_id) return Response.json({ error: "Invalid or expired session" }, { status: 401, headers: corsHeaders() });
+  if (!user_id) return Response.json({ error: "Invalid or expired session" }, { status: 401, headers: headers });
 
   return callback(req, body, user_id, auth.token);
 }
 
-function version() : Response {
-   return Response.json({ version : Constants.GAME_VERSION }, { status: 200, headers: corsHeaders() })
+function version(headers: Headers) : Response {
+   return Response.json({ version : Constants.GAME_VERSION }, { status: 200, headers: headers })
 }
 
 SessionManager.init();
@@ -374,16 +382,16 @@ console.log("Server running on port ", Constants.PORT);
 debugLog("JWT_SECRET chargé :", Bun.env.JWT_SECRET ? "oui" : "MANQUANT");
 
 
-async function handleVocabList<T extends RowDataPacket>(listName : string, tableName : string, requestUrl : URL, requestMethod : string) : Promise<Response | null>
+async function handleVocabList<T extends RowDataPacket>(listName : string, tableName : string, requestUrl : URL, requestMethod : string, headers : Headers) : Promise<Response | null>
 {
     if(requestUrl.pathname !== "/" + listName || requestMethod !== "GET")
         return null;
 
     const list = await DatabaseConnection.getTable<T>(tableName);
-    return Response.json({ [listName] : list }, { status: 200, headers: corsHeaders() });
+    return Response.json({ [listName] : list }, { status: 200, headers: headers });
 }
 
-async function handleVocabEdit(list: VocabList, url: URL, req: Request) : Promise<Response | null>
+async function handleVocabEdit(list: VocabList, url: URL, req: Request, headers : Headers) : Promise<Response | null>
 {
     const match = url.pathname.match(new RegExp(`^/${list.name}(?:/(\\d+))?$`));
     if (!match) return null;
@@ -391,11 +399,11 @@ async function handleVocabEdit(list: VocabList, url: URL, req: Request) : Promis
    
     const auth_payload = await getAuthPayload(req)
     if (!auth_payload || !auth_payload.token || !SessionManager.verify_session(auth_payload.token)) {
-        return Response.json({ message: "Unauthentificated" }, { status: 401, headers: corsHeaders() });
+        return Response.json({ message: "Unauthentificated" }, { status: 401, headers: headers });
     }
 
     if(!UserManager.is_user_admin(auth_payload.uuid)) {
-        return Response.json({ message: "Unauthorized" }, { status: 403, headers: corsHeaders() });
+        return Response.json({ message: "Unauthorized" }, { status: 403, headers: headers });
     }
 
     const id = match[1] ? Number(match[1]) : null;
@@ -404,22 +412,22 @@ async function handleVocabEdit(list: VocabList, url: URL, req: Request) : Promis
         if (id === null && req.method === "POST") {
             const body = (await req.json()) as Record<string, unknown>;
             const insertId = await DatabaseConnection.insertRow(list.table, body);
-            return Response.json({ id: insertId }, { status: 201, headers: corsHeaders() });
+            return Response.json({ id: insertId }, { status: 201, headers: headers });
         }
 
         if (id !== null && req.method === "PUT") {
             const body = (await req.json()) as Record<string, unknown>;
             let updateResult = await DatabaseConnection.updateRow(list.table, id, body);
-            return Response.json({ success: updateResult }, { status: updateResult ? 200 : 400, headers: corsHeaders() });
+            return Response.json({ success: updateResult }, { status: updateResult ? 200 : 400, headers: headers });
         }
 
         if (id !== null && req.method === "DELETE") {
             let deleteResult = await DatabaseConnection.deleteRow(list.table, id);
-            return Response.json({ success: deleteResult }, { status: deleteResult ? 200 : 400, headers: corsHeaders() });
+            return Response.json({ success: deleteResult }, { status: deleteResult ? 200 : 400, headers: headers });
         }
 
-        return Response.json({ message: "Unauthorized Method" }, { status: 405, headers: corsHeaders() });
+        return Response.json({ message: "Unauthorized Method" }, { status: 405, headers: headers });
     } catch (e: any) {
-        return Response.json({ error: e.message }, { status: 400, headers: corsHeaders() });
+        return Response.json({ error: e.message }, { status: 400, headers: headers });
     }
 }
