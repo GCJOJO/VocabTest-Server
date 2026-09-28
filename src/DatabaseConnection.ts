@@ -77,24 +77,28 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async doIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
-		return new Promise(async (resolve, reject) => {
+	public static async doIfConnected<T>(callback: (connection: mysql.PoolConnection) => Promise<T>): Promise<T> {
+		if(!this.con)
+		{
+			return Promise.reject(new Error("Database connection not initialized"));
+		}
+
 		let connection : mysql.PoolConnection | null = null;
-			try {
-				connection = await this.con.getConnection();
-				resolve(await callback(connection));
-			}
-			catch(error)
-			{
-				console.error("Cannot call callback in DoIfConnected : ", error);
-				reject(error);
-			}
-			finally
-			{
-				if (connection)
-					connection.release();
-			}
-		});
+		try {
+			connection = await this.con.getConnection();
+			return await callback(connection);
+		}
+		catch(error)
+		{
+			console.error("Cannot call callback in DoIfConnected : ", error);
+		}
+		finally
+		{
+			if (connection)
+				connection.release();
+		}
+
+		return Promise.reject(new Error("Database connection not initialized"));
 	}
 
 	public static async insertRow(table : string, data : Record<string, unknown>) : Promise<number>
@@ -221,9 +225,9 @@ export class DatabaseConnection {
 					var query = "SELECT `uuid` FROM `admin_user` WHERE `uuid` = ?";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [uuid]);
 					if (rows.length > 0 && rows[0] != null) {
-						resolve({ success: true, });
+						resolve({ success: true, is_admin: true });
 					} else {
-						resolve({ success: false });
+						resolve({ success: false, is_admin: false });
 					}
 				} catch (e) {
 					reject(e);

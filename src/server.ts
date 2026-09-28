@@ -156,6 +156,10 @@ Bun.serve({
 
                 
                 const register_result = await UserManager.createUser(username, first_name, last_name, password);
+                if(!register_result.success)
+                {
+                    return Response.json({message : register_result.error}, { status : 400, headers : headers });
+                }
 
                 const cookie_token = await new SignJWT({ token : register_result.token, uuid : register_result.uuid })
                     .setProtectedHeader({ alg: 'HS256' })
@@ -168,7 +172,7 @@ Bun.serve({
                 headers.set("Content-Type", "application/json");
                 headers.set("Set-Cookie", cookie);
 
-                return Response.json(register_result, { status : register_result.success ? 200 : 400, headers: headers });
+                return Response.json({uuid : register_result.uuid}, { status : register_result.success ? 200 : 400, headers: headers });
             }
             catch(e : any)
             {
@@ -253,6 +257,34 @@ Bun.serve({
             if(!playerId)
                 return Response.json({message : "Invalid Player Id"}, { status: 400, headers: headers });
             return Response.json({ result: GameManager.testOwnership(lobbyId, playerId)}, {status : 200, headers: headers});
+        }
+
+        if(url.pathname == "leaderboard" && req.method == "GET")
+        {
+            const leaderboard = await DatabaseConnection.getLeaderboard();
+            return Response.json({leaderboard : leaderboard}, {status: 200, headers: headers});
+        }
+
+        if(url.pathname == "/users" && req.method == "GET")
+        {
+            const body : {user_ids?: string[]} = await req.json() as any;
+            if(!body.user_ids)
+                return Response.json({message : "Missing user_ids parameter"}, { status: 400, headers: headers });
+
+            const users = await UserManager.getUsersInfo(body.user_ids);
+            return Response.json({users : users}, {status: 200, headers: headers});
+        }
+
+        if(url.pathname == "/update-score" && req.method == "POST")
+        {
+            const body : {user_id?: string, score?: number} = await req.json() as any;
+            if(!body.user_id || body.score === undefined)
+                return Response.json({message : "Missing user_id or score parameter"}, { status: 400, headers: headers });
+
+            const update_result = await UserManager.updateUserScore(body.user_id, body.score);
+            if(!update_result.success)
+                return Response.json({message : "Unable to update user score"}, { status: 400, headers: headers });
+            return Response.json({message : "Score updated successfully"}, { status: 200, headers: headers });
         }
 
         if(url.pathname == "/ws")
