@@ -23,7 +23,7 @@ export class UserManager
             return { success: false, error: result.error };
 
         const new_token = SessionManager.create_session(uuid);
-        return { success: result, uuid: uuid, token : new_token };
+        return { success: true, uuid: uuid, token : new_token };
     }
 
     public static async login(username: string, password: string)
@@ -64,6 +64,14 @@ export class UserManager
         if(result.success)
             return { success: true, new_score: result.new_score };
         return { success: false };
+    }
+
+    public static async is_user_admin(user_id: string)
+    {
+        let result : any = await DatabaseConnection.isUserAdmin(user_id);
+        if(result.success)
+            return result.is_admin;
+        return false;
     }
 }
 

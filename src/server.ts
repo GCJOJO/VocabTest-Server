@@ -13,7 +13,7 @@ const jwtSecret = Bun.env.JWT_SECRET;
  if (!jwtSecret) throw new Error("JWT_SECRET is required in file .env");
  const JWT_SECRET = new TextEncoder().encode(jwtSecret);
 
-const ALLOWED_ORIGIN = "http://localhost:5173";
+const ALLOWED_ORIGIN = Bun.env.ALLOWED_ORIGIN ?? "http://localhost:5173";
 
 const DEBUG_FILE_PATH = join(process.cwd(), ".debug");
 
@@ -37,6 +37,15 @@ function corsHeaders(): Record<string, string> {
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
+}
+
+function cookieAttributes(maxAge: number): string[] {
+    return [
+        "HttpOnly",
+        "Path=/",
+        `Max-Age=${maxAge}`,
+        ...(isDebugMode() ? ["SameSite=Lax"] : ["Secure", "SameSite=None"]),
+    ];
 }
 
 const USER_ROUTE_PATTERN = new URLPattern({ pathname: "/user/:id" });
@@ -113,18 +122,11 @@ Bun.serve({
                     .setExpirationTime('2h')
                     .sign(JWT_SECRET);
 
-                    const cookie = [
-                        `auth_token=${cookie_token}`,
-                        "HttpOnly",
-                        "Secure",
-                        "SameSite=None",
-                        `Max-Age=${2 * 60 * 60}`,
-                        "Path=/",
-                    ].join("; ");
+                const cookie = [`auth_token=${cookie_token}`, ...cookieAttributes(2 * 60 * 60)].join("; ");
 
-                    const headers = new Headers(corsHeaders());
-                    headers.set("Content-Type", "application/json");
-                    headers.set("Set-Cookie", cookie);
+                const headers = new Headers(corsHeaders());
+                headers.set("Content-Type", "application/json");
+                headers.set("Set-Cookie", cookie);
 
 
                 return Response.json({uuid : login_result.uuid}, { status : 200, headers: headers });
@@ -144,8 +146,22 @@ Bun.serve({
                 const first_name = body.first_name;
                 const last_name = body.last_name;
 
+                
                 const register_result = await UserManager.createUser(username, first_name, last_name, password);
-                return Response.json(register_result, { status : register_result.success ? 200 : 400, headers: corsHeaders() });
+
+                const cookie_token = await new SignJWT({ token : register_result.token, uuid : register_result.uuid })
+                    .setProtectedHeader({ alg: 'HS256' })
+                    .setIssuedAt()
+                    .setExpirationTime('2h')
+                    .sign(JWT_SECRET);
+
+                const cookie = [`auth_token=${cookie_token}`, ...cookieAttributes(2 * 60 * 60)].join("; ");
+
+                const headers = new Headers(corsHeaders());
+                headers.set("Content-Type", "application/json");
+                headers.set("Set-Cookie", cookie);
+
+                return Response.json(register_result, { status : register_result.success ? 200 : 400, headers: headers });
             }
             catch(e : any)
             {
@@ -376,6 +392,10 @@ async function handleVocabEdit(list: VocabList, url: URL, req: Request) : Promis
     const auth_payload = await getAuthPayload(req)
     if (!auth_payload || !auth_payload.token || !SessionManager.verify_session(auth_payload.token)) {
         return Response.json({ message: "Unauthentificated" }, { status: 401, headers: corsHeaders() });
+    }
+
+    if(!UserManager.is_user_admin(auth_payload.uuid)) {
+        return Response.json({ message: "Unauthorized" }, { status: 403, headers: corsHeaders() });
     }
 
     const id = match[1] ? Number(match[1]) : null;

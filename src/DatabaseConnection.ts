@@ -78,21 +78,23 @@ export class DatabaseConnection {
 	}
 
 	public static async doIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
+		return new Promise(async (resolve, reject) => {
 		let connection : mysql.PoolConnection | null = null;
-		
-		try {
-			connection = await this.con.getConnection();
-			await callback(connection);
-		}
-		catch(error)
-		{
-			console.error("Cannot call callback in DoIfConnected : ", error);
-		}
-		finally
-		{
-			if (connection)
-				connection.release();
-		}
+			try {
+				connection = await this.con.getConnection();
+				resolve(await callback(connection));
+			}
+			catch(error)
+			{
+				console.error("Cannot call callback in DoIfConnected : ", error);
+				reject(error);
+			}
+			finally
+			{
+				if (connection)
+					connection.release();
+			}
+		});
 	}
 
 	public static async insertRow(table : string, data : Record<string, unknown>) : Promise<number>
@@ -216,7 +218,7 @@ export class DatabaseConnection {
 		return new Promise((resolve, reject) => {
 			this.doIfConnected(async (connection) => {
 				try {
-					var query = "SELECT `uuid` WHERE `uuid` = ? AND `is_admin` = 1";
+					var query = "SELECT `uuid` FROM `admin_user` WHERE `uuid` = ?";
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [uuid]);
 					if (rows.length > 0 && rows[0] != null) {
 						resolve({ success: true, });
