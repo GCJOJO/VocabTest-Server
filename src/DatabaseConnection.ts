@@ -1,5 +1,6 @@
-import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from "mysql2";
-import { Utils } from "./Utils/Utils.js"
+import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
+import { Utils } from "./Utils/Utils"
+import { UserManager } from "./UserManager";
 
 export interface Word extends RowDataPacket {
 	id: number;
@@ -23,7 +24,6 @@ export interface Country extends RowDataPacket {
 	english: string;
 }
 
-
 export class Tables {
 	public static WORDS 	= "words";
 	public static VERBS 	= "verbs";
@@ -33,192 +33,160 @@ export class Tables {
 }
 
 export class DatabaseConnection {
-	static con: Pool = mysql.createPool({
-		host: "localhost",
-		user: "vocab-test",
-		password: "bonjoirjesuisleservernode",
-		database: "vocab-test",
-		waitForConnections: true,
-		connectionLimit: 10,
-		queueLimit: 10,
-		enableKeepAlive: true,
-		keepAliveInitialDelay: 0,
-	});
+	static con: Pool;
 
+	public static async init()
+	{
+		try{
+			DatabaseConnection.con = mysql.createPool({
+				host: "localhost",
+				user: "vocab-test",
+				password: Bun.env.DB_PASSWORD,
+				database: "vocab-test",
+				waitForConnections: true,
+				connectionLimit: 10,
+				queueLimit: 10,
+				enableKeepAlive: true,
+				keepAliveInitialDelay: 0,
+			});
+			console.log("Connected to database !"); 
+		}
+		catch(error : any)
+		{
+			console.error("Couldn't connect to database !", error);
+		}
+	}
 
-	public static async DoIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
+	private static columnCache = new Map<string, string[]>();
+
+	public static async getEditableColumns(table: string): Promise<string[]> {
+		const cached = this.columnCache.get(table);
+		if (cached) return cached;
+
 		return new Promise((resolve, reject) => {
-			this.con.getConnection(function (err, connection) {
-				if (err) {
-					console.error("Error connecting to database:", err);
-					reject(err);
-					return;
-				}
-
-				!(async function () {
-					try {
-						await callback(connection);
-					}
-					catch(error) {
-						console.error("Cannot call callback in DoIfConnected : ", error);
-						reject(error);
-						return;
-					}
-					finally {
-						connection.release();
-					}
-					resolve();
-				})();
+			this.doIfConnected(async (connection) => {
+				try {
+					const [rows] = await connection.query<RowDataPacket[]>(`SHOW COLUMNS FROM \`${table}\``);
+					const columns = rows
+						.filter(r => !String(r.Extra).includes("auto_increment")) // exclut id
+						.map(r => r.Field as string);
+					this.columnCache.set(table, columns);
+					resolve(columns);
+				} catch (e) { reject(e); }
 			});
 		});
 	}
 
-	public static async InsertIntoTable(table : string, data : any)
-	{
-		var baseQuery = Utils.format("INSERT INTO `{0}`", table);
-		var varNames = "";
-		var varFields = "";
-		var varFieldData : any[] = [];
-		var isFirst = true;
-
-		var entries = Object.entries(data);
-
-		for(var i = 0; i < entries.length; i++)
+	public static async doIfConnected<T>(callback: (connection: mysql.PoolConnection) => Promise<T>): Promise<T> {
+		if(!this.con)
 		{
-			var field = entries[i];
-			var fieldName = field?.[0];
-			if(!fieldName)
-				continue;
-
-			var fieldData : any = field?.[1];
-			console.log("Field Name :", fieldName)
-			varFieldData.push(fieldData);
-
-			if(isFirst)
-			{
-				isFirst = false;
-				varNames += Utils.format("`{0}`", fieldName);
-				varFields += "?";
-				continue;
-			}
-
-			varNames += Utils.format(", `{0}`", fieldName);
-			varFields += ", ?";
+			return Promise.reject(new Error("Database connection not initialized"));
 		}
 
-		var query = Utils.format("{0} ({1}) VALUES ({2})", baseQuery, varNames, varFields);
-		console.log("Query : ", query);
-
-		var returnId = -1;
-		await this.DoIfConnected(async (connection) => {
-			try {
-				var result = await connection.promise().query<ResultSetHeader>(query, varFieldData);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) inserted");
-
-				var insertedId = result[0].insertId;
-				if(insertedId)
-					returnId = insertedId;
-			} catch (error) {
-				console.error("Unable to insert into database : ", error);
-			}
-		});
-
-		return returnId;
-	}
-
-	public static async ChangeRow(table: string, id : number, data : any)
-	{
-		var baseQuery = Utils.format("UPDATE `{0}` SET", table);
-
-		var varFields = "";
-		var varFieldData : any[] = [];
-		var isFirst = true;
-
-		var entries = Object.entries(data);
-
-		for(var i = 0; i < entries.length; i++)
-		{
-			var field = entries[i];
-			var fieldName = field?.[0];
-			if(!fieldName)
-				continue;
-
-			var fieldData : any = field?.[1];
-			console.log("Field Name :", fieldName)
-			varFieldData.push(fieldData);
-
-			if(isFirst)
-			{
-				isFirst = false;
-				varFields += Utils.format("`{0}` = ?", fieldName);
-				continue;
-			}
-
-			varFields += Utils.format(", `{0}` = ?", fieldName);
+		let connection : mysql.PoolConnection | null = null;
+		try {
+			connection = await this.con.getConnection();
+			return await callback(connection);
 		}
-		
-		var id_check = Utils.format("WHERE `ID` = {0}", id);
+		catch(error)
+		{
+			console.error("Cannot call callback in DoIfConnected : ", error);
+		}
+		finally
+		{
+			if (connection)
+				connection.release();
+		}
 
-		var query = Utils.format("{0} {1} {2}", baseQuery, varFields, id_check);
-		console.log("Query : ", query);
-
-		var returnId = -1;
-		await this.DoIfConnected(async (connection) => {
-			try {
-				var result = await connection.promise().query<ResultSetHeader>(query, varFieldData);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) updated");
-
-				var insertedId = result[0].insertId;
-				if(insertedId)
-					returnId = insertedId;
-			} catch (error) {
-				console.error("Unable to update row ", id ," from database : ", error);
-			}
-		});
-
-		return returnId;
+		return Promise.reject(new Error("Database connection not initialized"));
 	}
 
-	public static async RemoveFromTable(table : string, id : number) 
+	public static async insertRow(table : string, data : Record<string, unknown>) : Promise<number>
 	{
-		this.DoIfConnected(async (connection) => {
+		const columns = (await this.getEditableColumns(table)).filter(c => c in data);
+		if (columns.length === 0) throw new Error("Aucun champ valide");
+
+		return new Promise((resolve, reject) => {
+			this.doIfConnected(async (connection) => {
+				try {
+					const cols = columns.map(c => `\`${c}\``).join(", ");
+					const placeholders = columns.map(() => "?").join(", ");
+					const [result] = await connection.query<ResultSetHeader>(
+						`INSERT INTO \`${table}\` (${cols}) VALUES (${placeholders})`,
+						columns.map(c => data[c] ?? null)
+					);
+					resolve(result.insertId);
+				} catch (e) { reject(e); }
+			});
+		});
+	}
+
+	public static async updateRow(table: string, id : number, data : Record<string, unknown>) : Promise<boolean>
+	{
+		const columns = (await this.getEditableColumns(table)).filter(c => c in data);
+		if (columns.length === 0) throw new Error("Aucun champ valide");
+
+		return new Promise((resolve, reject) => {
+			this.doIfConnected(async (connection) => {
+				try {
+					const assignments = columns.map(c => `\`${c}\` = ?`).join(", ");
+					const [result] = await connection.query<ResultSetHeader>(
+						`UPDATE \`${table}\` SET ${assignments} WHERE \`id\` = ?`,
+						[...columns.map(c => data[c] ?? null), id]
+					);
+					resolve(result.affectedRows >= 1);
+				} catch (e) { reject(e); }
+			});
+		});
+	}
+
+	public static async deleteRow(table : string, id : number) : Promise<boolean>
+	{
+		var removed = false;
+		await this.doIfConnected(async (connection) => {
 			try {
 				var query = Utils.format("DELETE FROM `{0}` WHERE `id` = ?", table);
-				var result = await connection.promise().query<ResultSetHeader>(query, [id]);
+				var result = await connection.query<ResultSetHeader>(query, [id]);
 				var affectedRows = result[0].affectedRows;
 				console.log(affectedRows + " record(s) deleted");
+				if(affectedRows >= 1)
+					removed = true
 			} catch (error) {
 				console.error("Error deleting word:", error);
 			}
 		});
+
+		return removed;
 	}
 
-	public static async GetTable<T extends RowDataPacket>(table : string): Promise<T[]>
+	public static async getTable<T extends RowDataPacket>(table : string): Promise<T[]>
 	{
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
 					var query = Utils.format("SELECT * FROM `{0}`", table);
-					var [rows] = await connection.promise().query<T[]>(query);
+					var [rows] = await connection.query<T[]>(query);
 					resolve(rows);
 				} catch (error) {
 					console.error("Error fetching table ", table, ", ", error);
+					reject(error);
 				}
 			});
 		});
 	}
 
-	public static async CreateUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) {
+	public static async createUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) : Promise<{success: boolean, error?: any}> {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
 					var query = "INSERT INTO `users` (`uuid`, `username`, `first_name`, `last_name`, `password_hash`) VALUES (?, ?,  ?, ?, ?)";
-					var result = await connection.promise().query<ResultSetHeader>(query, [uuid, username, first_name, last_name, password_hash]);
+					var result = await connection.query<ResultSetHeader>(query, [uuid, username, first_name, last_name, password_hash]);
 					var affectedRows = result[0].affectedRows;
 					console.log(affectedRows + " record(s) inserted");
-					resolve(affectedRows >= 1);
+					if(affectedRows >= 1)
+						resolve({ success: true });
+					else
+						resolve({ success: false, error: "Failed to create user" });
 				} catch (e) {
 					console.error("Error creating user:", e);
 					reject(e);
@@ -227,16 +195,39 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async Login(username: string, password_hash: string) {
+	public static async login(username: string, password: string) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
-					var query = "SELECT `uuid` FROM `users` WHERE `username` = ? AND `password_hash` = ?";
-					var [rows, fields] = await connection.promise().query<RowDataPacket[]>(query, [username, password_hash]);
+					var query = "SELECT `uuid`, `username`, `password_hash` FROM `users` WHERE `username` = ?";
+					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [username]);
 					if (rows.length > 0 && rows[0] != null) {
-						resolve({ success: true, uuid: rows[0].uuid });
+						const user = rows[0];
+						if(await UserManager.check_password(password, user.password_hash))
+						{
+							resolve({ success: true, uuid: rows[0].uuid });
+							return;
+						}
+					}
+					resolve({ success: false });
+					return;
+				} catch (e) {
+					reject(e);
+				}
+			});
+		});
+	}
+
+	public static async isUserAdmin(uuid : string) {
+		return new Promise((resolve, reject) => {
+			this.doIfConnected(async (connection) => {
+				try {
+					var query = "SELECT `uuid` FROM `admin_user` WHERE `uuid` = ?";
+					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [uuid]);
+					if (rows.length > 0 && rows[0] != null) {
+						resolve({ success: true, is_admin: true });
 					} else {
-						resolve({ success: false });
+						resolve({ success: false, is_admin: false });
 					}
 				} catch (e) {
 					reject(e);
@@ -245,30 +236,12 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async IsUserAdmin(uuid : string) {
+	public static async getUserInfo(user_id: string) : Promise<{success : boolean, user_info? : RowDataPacket}> {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
-				try {
-					var query = "SELECT `uuid` WHERE `uuid` = ? AND `is_admin` = 1";
-					var [rows, fields] = await connection.promise().query<RowDataPacket[]>(query, [uuid]);
-					if (rows.length > 0 && rows[0] != null) {
-						resolve({ success: true, });
-					} else {
-						resolve({ success: false });
-					}
-				} catch (e) {
-					reject(e);
-				}
-			});
-		});
-	}
-
-	public static async GetUserInfo(user_id: string) {
-		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async (connection) => {
+			this.doIfConnected(async (connection) => {
 				try {
 					var query = "SELECT `uuid`, `username`, `first_name`, `last_name` FROM `users` WHERE `uuid` = ?";
-					var [rows, fields] = await connection.promise().query<RowDataPacket[]>(query, [user_id]);
+					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [user_id]);
 					if (rows.length > 0 && rows[0] != null) {
 						resolve({ success: true, user_info: rows[0] });
 					} else {
@@ -281,12 +254,12 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async GetUsersInfo(user_ids: string[]) {
+	public static async getUsersInfo(user_ids: string[]) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
 					var query = "SELECT `uuid`, `username`, `first_name`, `last_name` FROM `users` WHERE `uuid` IN (?)";
-					var [rows, fields] = await connection.promise().query<RowDataPacket[]>(query, [user_ids]);
+					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [user_ids]);
 					resolve({ success: true, users_info: rows });
 				} catch (e) {
 					reject(e);
@@ -295,12 +268,12 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static GetUserScore(user_id: string) {
+	public static getUserScore(user_id: string) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
 					var query = "SELECT `score` FROM `users` WHERE `uuid` = ?";
-					var [rows, fields] = await connection.promise().query<RowDataPacket[]>(query, [user_id]);
+					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [user_id]);
 					if (rows.length > 0 && rows[0] != null) {
 						resolve({ success: true, score: rows[0].score });
 					} else {
@@ -313,11 +286,11 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async UpdateUserScore(user_id: string, score: number) {
+	public static async updateUserScore(user_id: string, score: number) {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
-					var current_score: any = await DatabaseConnection.GetUserScore(user_id);
+					var current_score: any = await DatabaseConnection.getUserScore(user_id);
 					if (!current_score.success) {
 						return resolve({ success: false });
 					}
@@ -327,7 +300,7 @@ export class DatabaseConnection {
 					}
 
 					var query = "UPDATE `users` SET `score` = ? WHERE `uuid` = ?";
-					var result = await connection.promise().query<ResultSetHeader>(query, [score, user_id]);
+					var result = await connection.query<ResultSetHeader>(query, [score, user_id]);
 					var affectedRows = result[0].affectedRows;
 					if (affectedRows >= 1) {
 						resolve({ success: true, new_score: score });
@@ -341,12 +314,12 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async GetLeaderboard() {
+	public static async getLeaderboard() {
 		return new Promise((resolve, reject) => {
-			this.DoIfConnected(async function (connection) {
+			this.doIfConnected(async function (connection) {
 				try {
 					var query = "SELECT `uuid`, `username`, `score` FROM `users` ORDER BY `score` DESC";
-					var [rows, fields] = await connection.promise().query<RowDataPacket[]>(query);
+					var [rows, fields] = await connection.query<RowDataPacket[]>(query);
 					resolve({ success: true, leaderboard: rows.filter((row) => row != null && row.score > 0) });
 				} catch (e) {
 					reject(e);

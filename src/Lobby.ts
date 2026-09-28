@@ -1,11 +1,11 @@
-import { WebSocket } from "ws";
-import { LobbyOptions, LobbyMode } from "./LobbyOptions.js";
-import { LobbyPlayer } from "./LobbyPlayer.js";
-import { Constants } from "./Constants.js";
-import { Utils } from "./Utils/Utils.js";
-import { MapUtils } from "./Utils/MapUtils.js";
+import { LobbyOptions, LobbyMode } from "./LobbyOptions";
+import { LobbyPlayer } from "./LobbyPlayer";
+import { Constants } from "./Constants";
+import { Utils } from "./Utils/Utils";
+import { MapUtils } from "./Utils/MapUtils";
 
-import { DatabaseConnection, Tables, type Word, type Verb, type Country } from "./DatabaseConnection.js";
+import { DatabaseConnection, Tables, type Word, type Verb, type Country } from "./DatabaseConnection";
+import type { ServerWebSocket } from "bun";
 
 enum LobbyState
 {
@@ -39,7 +39,7 @@ export class Lobby
         return this.players.size;
     }
 
-    public PlayerJoin(playerId: string, joiningWebsocket: WebSocket) : boolean
+    public PlayerJoin(playerId: string, joiningWebsocket: ServerWebSocket) : boolean
     {
         if (this.state != LobbyState.Waiting) {
             console.warn("Player tried to join a lobby that already started !");
@@ -142,10 +142,10 @@ export class Lobby
 
         this.players.forEach((player) => player.websocket.send(JSON.stringify(updateScores)));
 
-        let randomizedWords = Utils.shuffle(await DatabaseConnection.GetTable<Word>(Tables.WORDS));
-        let randomizedVerbs = Utils.shuffle(await DatabaseConnection.GetTable<Verb>(Tables.VERBS));
-        let randomizedCountries = Utils.shuffle(await DatabaseConnection.GetTable<Country>(Tables.COUNTRY));
-        let randomizedGrammar = Utils.shuffle(await DatabaseConnection.GetTable<Word>(Tables.GRAMMAR));
+        let randomizedWords = Utils.shuffle(await DatabaseConnection.getTable<Word>(Tables.WORDS));
+        let randomizedVerbs = Utils.shuffle(await DatabaseConnection.getTable<Verb>(Tables.VERBS));
+        let randomizedCountries = Utils.shuffle(await DatabaseConnection.getTable<Country>(Tables.COUNTRY));
+        let randomizedGrammar = Utils.shuffle(await DatabaseConnection.getTable<Word>(Tables.GRAMMAR));
 
         let questionCategoryAmounts : { [key: number]: number } = {};
         let questionCategoryMaxAmounts : { [key: number]: number } = {};

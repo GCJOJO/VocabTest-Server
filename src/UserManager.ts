@@ -1,31 +1,50 @@
-import { DatabaseConnection } from "./DatabaseConnection.js";
-import { Utils } from "./Utils/Utils.js";
+import { DatabaseConnection } from "./DatabaseConnection";
+import { SessionManager } from "./SessionManager";
+import { Utils } from "./Utils/Utils";
 
 export class UserManager
 {
-    public static async createUser(username: string, first_name: string, last_name: string, password_hash: string) 
+    public static check_password(password : string, stored_password : string) : Promise<boolean>
     {
-        let uuid = Utils.uuidv4();
-        let result = await DatabaseConnection.CreateUser(uuid, username, first_name, last_name, password_hash);
-        return { success: result, uuid: uuid };
+        return Bun.password.verify(password, stored_password);
     }
 
-    public static async login(username: string, password_hash: string)
+    public static hash_password(password : string) : Promise<string>
+    {
+        return Bun.password.hash(password);
+    }
+
+    public static async createUser(username: string, first_name: string, last_name: string, password: string) 
+    {
+        let uuid = Utils.uuidv4();
+        let password_hash = await this.hash_password(password);
+        let result = await DatabaseConnection.createUser(uuid, username, first_name, last_name, password_hash);
+        if(!result.success)
+            return { success: false, error: result.error };
+
+        const new_token = SessionManager.create_session(uuid);
+        return { success: true, uuid: uuid, token : new_token };
+    }
+
+    public static async login(username: string, password: string)
     {
         try {
-            let result : any = await DatabaseConnection.Login(username, password_hash);
+            let result : any = await DatabaseConnection.login(username, password);
             if(result.success)
-                return { success: true, uuid: result.uuid };
+            {
+                const new_token = SessionManager.create_session(result.uuid);
+                return { success: true, uuid: result.uuid, token : new_token };
+            }
             return { success: false };
         } catch (error) {
             console.error("Error in login:", error);
-            return { success: false };
+            return { success: false, "error" : error };
         }
     }
 
     public static async getUserInfo(user_id: string)
     {
-        let result : any = await DatabaseConnection.GetUserInfo(user_id);
+        let result : any = await DatabaseConnection.getUserInfo(user_id);
         if(result.success)
             return { success: true, user_info: result.user_info };
         return { success: false };
@@ -33,7 +52,7 @@ export class UserManager
 
     public static async getUsersInfo(user_ids: string[])
     {
-        let result : any = await DatabaseConnection.GetUsersInfo(user_ids);
+        let result : any = await DatabaseConnection.getUsersInfo(user_ids);
         if(result.success)
             return { success: true, users_info: result.users_info };
         return { success: false };
@@ -41,10 +60,18 @@ export class UserManager
 
     public static async updateUserScore(user_id: string, score: number)
     {
-        let result : any = await DatabaseConnection.UpdateUserScore(user_id, score);
+        let result : any = await DatabaseConnection.updateUserScore(user_id, score);
         if(result.success)
             return { success: true, new_score: result.new_score };
         return { success: false };
+    }
+
+    public static async is_user_admin(user_id: string)
+    {
+        let result : any = await DatabaseConnection.isUserAdmin(user_id);
+        if(result.success)
+            return result.is_admin;
+        return false;
     }
 }
 
