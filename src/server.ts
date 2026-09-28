@@ -9,7 +9,9 @@ import { join } from "path";
 import { GameManager } from "./GameManager";
 import type { RowDataPacket } from "mysql2";
 
-const JWT_SECRET = new TextEncoder().encode(Bun.env.JWT_SECRET!);
+const jwtSecret = Bun.env.JWT_SECRET;
+ if (!jwtSecret) throw new Error("JWT_SECRET is required in file .env");
+ const JWT_SECRET = new TextEncoder().encode(jwtSecret);
 
 const ALLOWED_ORIGIN = "http://localhost:5173";
 
@@ -125,7 +127,7 @@ Bun.serve({
                     headers.set("Set-Cookie", cookie);
 
 
-                return Response.json(login_result, { status : 200, headers: headers });
+                return Response.json({uuid : login_result.uuid}, { status : 200, headers: headers });
             }
             catch(e : any)
             {
@@ -143,7 +145,7 @@ Bun.serve({
                 const last_name = body.last_name;
 
                 const register_result = await UserManager.createUser(username, first_name, last_name, password);
-                return Response.json(register_result);
+                return Response.json(register_result, { status : register_result.success ? 200 : 400, headers: corsHeaders() });
             }
             catch(e : any)
             {
@@ -153,8 +155,7 @@ Bun.serve({
 
         if(url.pathname == "/logout" && req.method == "POST")
         {
-            check_user_token(req, req.body, async (req : Request, body : any, user_id : string, token : string) => {
-                
+            return await check_user_token(req, req.body, async (req : Request, body : any, user_id : string, token : string) => {
                 SessionManager.destroy_session(token);
                 
                 const cookie = [
@@ -179,7 +180,7 @@ Bun.serve({
 
         if(url.pathname == "/me" && req.method == "GET")
         {            
-            let body : any = await req.body?.json();
+            let body : any = {};
             return check_user_token(req, body, async (req : Request, body : any, user_id : string, token : string) => 
             {
                 const user_result = await UserManager.getUserInfo(user_id);
@@ -217,8 +218,8 @@ Bun.serve({
             const userId = user_match.pathname.groups.id as string;
             const result = await DatabaseConnection.getUserInfo(userId);
             debugLog("User Id : ", userId, " result :", result);
-            if(result)
-                return Response.json(result, { status: 200, headers: corsHeaders() });
+            if(result.success)
+                return Response.json({user_info: result.user_info}, { status: 200, headers: corsHeaders() });
             return Response.json(result, { status: 400, headers: corsHeaders() });
         }
 
@@ -371,8 +372,9 @@ async function handleVocabEdit(list: VocabList, url: URL, req: Request) : Promis
     const match = url.pathname.match(new RegExp(`^/${list.name}(?:/(\\d+))?$`));
     if (!match) return null;
 
-    // Toutes ces routes exigent d'être connecté
-    if (!(await getAuthPayload(req))) {
+   
+    const auth_payload = await getAuthPayload(req)
+    if (!auth_payload || !auth_payload.token || !SessionManager.verify_session(auth_payload.token)) {
         return Response.json({ message: "Unauthentificated" }, { status: 401, headers: corsHeaders() });
     }
 
@@ -387,13 +389,13 @@ async function handleVocabEdit(list: VocabList, url: URL, req: Request) : Promis
 
         if (id !== null && req.method === "PUT") {
             const body = (await req.json()) as Record<string, unknown>;
-            await DatabaseConnection.updateRow(list.table, id, body);
-            return Response.json({ success: true }, { status: 200, headers: corsHeaders() });
+            let updateResult = await DatabaseConnection.updateRow(list.table, id, body);
+            return Response.json({ success: updateResult }, { status: updateResult ? 200 : 400, headers: corsHeaders() });
         }
 
         if (id !== null && req.method === "DELETE") {
-            await DatabaseConnection.deleteRow(list.table, id);
-            return Response.json({ success: true }, { status: 200, headers: corsHeaders() });
+            let deleteResult = await DatabaseConnection.deleteRow(list.table, id);
+            return Response.json({ success: deleteResult }, { status: deleteResult ? 200 : 400, headers: corsHeaders() });
         }
 
         return Response.json({ message: "Unauthorized Method" }, { status: 405, headers: corsHeaders() });

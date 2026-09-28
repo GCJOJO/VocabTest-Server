@@ -21,7 +21,7 @@ class SessionManager
         this.db = new Database("sessions.sqlite");
 
         this.db.run(`CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY_KEY,
+            token TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
             expires_at INTEGER NOT NULL
             )`
@@ -94,4 +94,4 @@ class SessionManager
 
 export { SessionManager }
 
-Bun.cron("@hourly", SessionManager.clean_expired_session);
+Bun.cron("@hourly", () => SessionManager.clean_expired_session());

@@ -41,7 +41,7 @@ export class DatabaseConnection {
 			DatabaseConnection.con = mysql.createPool({
 				host: "localhost",
 				user: "vocab-test",
-				password: "bonjoirjesuisleservernode",
+				password: Bun.env.DB_PASSWORD,
 				database: "vocab-test",
 				waitForConnections: true,
 				connectionLimit: 10,
@@ -78,9 +78,10 @@ export class DatabaseConnection {
 	}
 
 	public static async doIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
-		const connection = await this.con.getConnection();
+		let connection : mysql.PoolConnection | null = null;
 		
 		try {
+			connection = await this.con.getConnection();
 			await callback(connection);
 		}
 		catch(error)
@@ -89,7 +90,8 @@ export class DatabaseConnection {
 		}
 		finally
 		{
-			connection.release();
+			if (connection)
+				connection.release();
 		}
 	}
 
@@ -167,7 +169,7 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async createUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) {
+	public static async createUser(uuid: string, username: string, first_name: string, last_name: string, password_hash: string) : Promise<{success: boolean, error?: any}> {
 		return new Promise((resolve, reject) => {
 			this.doIfConnected(async (connection) => {
 				try {
@@ -175,7 +177,10 @@ export class DatabaseConnection {
 					var result = await connection.query<ResultSetHeader>(query, [uuid, username, first_name, last_name, password_hash]);
 					var affectedRows = result[0].affectedRows;
 					console.log(affectedRows + " record(s) inserted");
-					resolve(affectedRows >= 1);
+					if(affectedRows >= 1)
+						resolve({ success: true });
+					else
+						resolve({ success: false, error: "Failed to create user" });
 				} catch (e) {
 					console.error("Error creating user:", e);
 					reject(e);
@@ -192,7 +197,6 @@ export class DatabaseConnection {
 					var [rows, fields] = await connection.query<RowDataPacket[]>(query, [username]);
 					if (rows.length > 0 && rows[0] != null) {
 						const user = rows[0];
-						console.log("Checking password ", password, " with ", user.password_hash)
 						if(await UserManager.check_password(password, user.password_hash))
 						{
 							resolve({ success: true, uuid: rows[0].uuid });

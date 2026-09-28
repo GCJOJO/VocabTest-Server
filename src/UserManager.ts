@@ -19,6 +19,9 @@ export class UserManager
         let uuid = Utils.uuidv4();
         let password_hash = await this.hash_password(password);
         let result = await DatabaseConnection.createUser(uuid, username, first_name, last_name, password_hash);
+        if(!result.success)
+            return { success: false, error: result.error };
+
         const new_token = SessionManager.create_session(uuid);
         return { success: result, uuid: uuid, token : new_token };
     }
