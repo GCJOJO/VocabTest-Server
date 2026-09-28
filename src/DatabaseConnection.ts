@@ -57,6 +57,26 @@ export class DatabaseConnection {
 		}
 	}
 
+	private static columnCache = new Map<string, string[]>();
+
+	public static async getEditableColumns(table: string): Promise<string[]> {
+		const cached = this.columnCache.get(table);
+		if (cached) return cached;
+
+		return new Promise((resolve, reject) => {
+			this.doIfConnected(async (connection) => {
+				try {
+					const [rows] = await connection.query<RowDataPacket[]>(`SHOW COLUMNS FROM \`${table}\``);
+					const columns = rows
+						.filter(r => !String(r.Extra).includes("auto_increment")) // exclut id
+						.map(r => r.Field as string);
+					this.columnCache.set(table, columns);
+					resolve(columns);
+				} catch (e) { reject(e); }
+			});
+		});
+	}
+
 	public static async doIfConnected(callback: (connection: mysql.PoolConnection) => Promise<void>): Promise<void> {
 		const connection = await this.con.getConnection();
 		
@@ -73,126 +93,62 @@ export class DatabaseConnection {
 		}
 	}
 
-	public static async insertIntoTable(table : string, data : any)
+	public static async insertRow(table : string, data : Record<string, unknown>) : Promise<number>
 	{
-		var baseQuery = Utils.format("INSERT INTO `{0}`", table);
-		var varNames = "";
-		var varFields = "";
-		var varFieldData : any[] = [];
-		var isFirst = true;
+		const columns = (await this.getEditableColumns(table)).filter(c => c in data);
+		if (columns.length === 0) throw new Error("Aucun champ valide");
 
-		var entries = Object.entries(data);
-
-		for(var i = 0; i < entries.length; i++)
-		{
-			var field = entries[i];
-			var fieldName = field?.[0];
-			if(!fieldName)
-				continue;
-
-			var fieldData : any = field?.[1];
-			console.log("Field Name :", fieldName)
-			varFieldData.push(fieldData);
-
-			if(isFirst)
-			{
-				isFirst = false;
-				varNames += Utils.format("`{0}`", fieldName);
-				varFields += "?";
-				continue;
-			}
-
-			varNames += Utils.format(", `{0}`", fieldName);
-			varFields += ", ?";
-		}
-
-		var query = Utils.format("{0} ({1}) VALUES ({2})", baseQuery, varNames, varFields);
-		console.log("Query : ", query);
-
-		var returnId = -1;
-		await this.doIfConnected(async (connection) => {
-			try {
-				var result = await connection.query<ResultSetHeader>(query, varFieldData);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) inserted");
-
-				var insertedId = result[0].insertId;
-				if(insertedId)
-					returnId = insertedId;
-			} catch (error) {
-				console.error("Unable to insert into database : ", error);
-			}
+		return new Promise((resolve, reject) => {
+			this.doIfConnected(async (connection) => {
+				try {
+					const cols = columns.map(c => `\`${c}\``).join(", ");
+					const placeholders = columns.map(() => "?").join(", ");
+					const [result] = await connection.query<ResultSetHeader>(
+						`INSERT INTO \`${table}\` (${cols}) VALUES (${placeholders})`,
+						columns.map(c => data[c] ?? null)
+					);
+					resolve(result.insertId);
+				} catch (e) { reject(e); }
+			});
 		});
-
-		return returnId;
 	}
 
-	public static async changeRow(table: string, id : number, data : any)
+	public static async updateRow(table: string, id : number, data : Record<string, unknown>) : Promise<boolean>
 	{
-		var baseQuery = Utils.format("UPDATE `{0}` SET", table);
+		const columns = (await this.getEditableColumns(table)).filter(c => c in data);
+		if (columns.length === 0) throw new Error("Aucun champ valide");
 
-		var varFields = "";
-		var varFieldData : any[] = [];
-		var isFirst = true;
-
-		var entries = Object.entries(data);
-
-		for(var i = 0; i < entries.length; i++)
-		{
-			var field = entries[i];
-			var fieldName = field?.[0];
-			if(!fieldName)
-				continue;
-
-			var fieldData : any = field?.[1];
-			console.log("Field Name :", fieldName)
-			varFieldData.push(fieldData);
-
-			if(isFirst)
-			{
-				isFirst = false;
-				varFields += Utils.format("`{0}` = ?", fieldName);
-				continue;
-			}
-
-			varFields += Utils.format(", `{0}` = ?", fieldName);
-		}
-		
-		var id_check = Utils.format("WHERE `ID` = {0}", id);
-
-		var query = Utils.format("{0} {1} {2}", baseQuery, varFields, id_check);
-		console.log("Query : ", query);
-
-		var returnId = -1;
-		await this.doIfConnected(async (connection) => {
-			try {
-				var result = await connection.query<ResultSetHeader>(query, varFieldData);
-				var affectedRows = result[0].affectedRows;
-				console.log(affectedRows + " record(s) updated");
-
-				var insertedId = result[0].insertId;
-				if(insertedId)
-					returnId = insertedId;
-			} catch (error) {
-				console.error("Unable to update row ", id ," from database : ", error);
-			}
+		return new Promise((resolve, reject) => {
+			this.doIfConnected(async (connection) => {
+				try {
+					const assignments = columns.map(c => `\`${c}\` = ?`).join(", ");
+					const [result] = await connection.query<ResultSetHeader>(
+						`UPDATE \`${table}\` SET ${assignments} WHERE \`id\` = ?`,
+						[...columns.map(c => data[c] ?? null), id]
+					);
+					resolve(result.affectedRows >= 1);
+				} catch (e) { reject(e); }
+			});
 		});
-
-		return returnId;
 	}
 
-	public static async removeFromTable(table : string, id : number) 
+	public static async deleteRow(table : string, id : number) : Promise<boolean>
 	{
-		this.doIfConnected(async (connection) => {
+		var removed = false;
+		await this.doIfConnected(async (connection) => {
 			try {
 				var query = Utils.format("DELETE FROM `{0}` WHERE `id` = ?", table);
 				var result = await connection.query<ResultSetHeader>(query, [id]);
 				var affectedRows = result[0].affectedRows;
 				console.log(affectedRows + " record(s) deleted");
+				if(affectedRows >= 1)
+					removed = true
 			} catch (error) {
 				console.error("Error deleting word:", error);
 			}
 		});
+
+		return removed;
 	}
 
 	public static async getTable<T extends RowDataPacket>(table : string): Promise<T[]>

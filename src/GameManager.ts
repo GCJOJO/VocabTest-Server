@@ -1,23 +1,28 @@
+import type { ServerWebSocket } from "bun";
 import * as DatabaseConnection from "./DatabaseConnection";
 import { Lobby } from "./Lobby";
 import { MapUtils } from "./Utils/MapUtils";
 
-Bun.cron("* * * * * *", () => GameManager.tickLobbies());
+const milliseconds = 1000;
+
+setInterval(() => GameManager.tickLobbies(), 1 * milliseconds);
 
 // Cleanup lobbies every 30 seconds
-Bun.cron("*/30 * * * * *", () => GameManager.cleanupLobbies());
+//Bun.cron("*/30 * * * * *", () => GameManager.cleanupLobbies());
+setInterval(() => GameManager.cleanupLobbies(), 30 * milliseconds);
+
 
 export class GameManager 
 {
 	private static lobbies : Map<string, Lobby> = new Map();
 
-	public static createLobby(playerId : string, ownerWebsocket : WebSocket) {
+	public static createLobby(playerId : string, ownerWebsocket : ServerWebSocket) {
 		let lobbyId : string = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 		this.lobbies.set(lobbyId, new Lobby(lobbyId, playerId));
 		return lobbyId;
 	}
 
-	public static joinLobby(lobbyId : string, playerId : string, playerWebsocket : WebSocket) {
+	public static joinLobby(lobbyId : string, playerId : string, playerWebsocket : ServerWebSocket) {
 		let lobby = this.lobbies.get(lobbyId);
 		if (lobby != undefined) {
 			return lobby.PlayerJoin(playerId, playerWebsocket);

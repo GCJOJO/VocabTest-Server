@@ -73,9 +73,20 @@ class SessionManager
 
     static clean_expired_session() : void
     {
-        const result = this.db.run("DELETE FROM sessions WHERE expires_at < ?", [Date.now()]);
-        if(result.changes > 0)
-            console.log(`Cleaned ${result.changes} session(s)`);
+        try{
+            if(!this.db)
+            {
+                console.log("Error with database !");
+                return;
+            }
+            const result = this.db.run("DELETE FROM sessions WHERE expires_at < ?", [Date.now()]);
+            if(result.changes > 0)
+                console.log(`Cleaned ${result.changes} session(s)`);
+        }
+        catch (error)
+        {
+            console.error(error);
+        }
     }
 
 

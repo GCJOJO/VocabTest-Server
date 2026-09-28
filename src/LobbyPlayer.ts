@@ -1,3 +1,5 @@
+import type { ServerWebSocket } from "bun";
+
 export class LobbyPlayer
 {
     public id: string;
@@ -7,9 +9,9 @@ export class LobbyPlayer
     public is_spectator: boolean = false;
     public is_spectating: boolean = false;
 
-    public websocket: WebSocket;
+    public websocket: ServerWebSocket;
 
-    constructor(id: string, websocket: WebSocket)
+    constructor(id: string, websocket: ServerWebSocket)
     {
         this.id = id;
         this.websocket = websocket;

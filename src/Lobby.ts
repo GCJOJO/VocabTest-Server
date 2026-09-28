@@ -5,6 +5,7 @@ import { Utils } from "./Utils/Utils";
 import { MapUtils } from "./Utils/MapUtils";
 
 import { DatabaseConnection, Tables, type Word, type Verb, type Country } from "./DatabaseConnection";
+import type { ServerWebSocket } from "bun";
 
 enum LobbyState
 {
@@ -38,7 +39,7 @@ export class Lobby
         return this.players.size;
     }
 
-    public PlayerJoin(playerId: string, joiningWebsocket: WebSocket) : boolean
+    public PlayerJoin(playerId: string, joiningWebsocket: ServerWebSocket) : boolean
     {
         if (this.state != LobbyState.Waiting) {
             console.warn("Player tried to join a lobby that already started !");
