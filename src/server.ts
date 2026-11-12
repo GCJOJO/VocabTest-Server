@@ -137,11 +137,12 @@ Bun.serve({
                 headers.set("Set-Cookie", cookie);
 
 
-                return Response.json({uuid : login_result.uuid}, { status : 200, headers: headers });
+
+                return Response.json({ success: true, uuid : login_result.uuid }, { status : 200, headers: headers });
             }
             catch(e : any)
             {
-                return Response.json({ error : e.message }, { status : 400, headers: headers });
+                return Response.json({ success: false,  error : e.message }, { status : 400, headers: headers });
             }
         }
 
@@ -172,11 +173,11 @@ Bun.serve({
                 headers.set("Content-Type", "application/json");
                 headers.set("Set-Cookie", cookie);
 
-                return Response.json({uuid : register_result.uuid}, { status : register_result.success ? 200 : 400, headers: headers });
+                return Response.json({ success: true, uuid : register_result.uuid}, { status : register_result.success ? 200 : 400, headers: headers });
             }
             catch(e : any)
             {
-                return Response.json({ error : e.message }, { status : 400, headers: headers });
+                return Response.json({ success: false,  error : e.message }, { status : 400, headers: headers });
             }
         }
 
@@ -259,10 +260,10 @@ Bun.serve({
             return Response.json({ result: GameManager.testOwnership(lobbyId, playerId)}, {status : 200, headers: headers});
         }
 
-        if(url.pathname == "leaderboard" && req.method == "GET")
+        if(url.pathname == "/leaderboard" && req.method == "GET")
         {
-            const leaderboard = await DatabaseConnection.getLeaderboard();
-            return Response.json({leaderboard : leaderboard}, {status: 200, headers: headers});
+            const result = await DatabaseConnection.getLeaderboard();
+            return Response.json({ success: result.success, leaderboard: result.leaderboard }, {status: 200, headers: headers});
         }
 
         if(url.pathname == "/users" && req.method == "GET")

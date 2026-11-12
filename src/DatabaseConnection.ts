@@ -314,7 +314,7 @@ export class DatabaseConnection {
 		});
 	}
 
-	public static async getLeaderboard() {
+	public static async getLeaderboard() : Promise<{success: boolean, leaderboard?: RowDataPacket[]}> {
 		return new Promise((resolve, reject) => {
 			this.doIfConnected(async function (connection) {
 				try {
