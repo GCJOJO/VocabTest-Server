@@ -88,7 +88,7 @@ const vocabLists = [
     { name: "grammar", table: Tables.GRAMMAR },
     { name: "gaming",  table: Tables.GAMING },
     { name: "verbs",   table: Tables.VERBS },
-    { name: "countries", table: Tables.COUNTRY },
+    { name: "country", table: Tables.COUNTRY },
 ];
 
 type VocabList = (typeof vocabLists)[number];
